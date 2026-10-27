@@ -1,0 +1,235 @@
+(
+	(fetched ((
+		(name "roc")
+		(obtained Both)
+		(served ())
+		(sha256 "70346ac60dd0b0507881447c5b47aed799fd1bea01c50bac56f82ed96897f4df")
+		(size 72460515)
+		(system "x86_64-linux")
+		(urls ("https://github.com/roc-lang/nightlies/releases/download/nightly-2026-10-21-5349569/roc_nightly-linux_x86_64-2026-10-21-5349569.tar.gz"))
+		(witness "https://api.github.com/repos/roc-lang/nightlies/releases/tags/nightly-2026-10-21-5349569")) (
+		(name "roc")
+		(obtained Published)
+		(served ())
+		(sha256 "cb6cbe82e45ba284d5b01910e8e91a978701ffed3c2baf2c9a88baa4adc369f5")
+		(size 69304823)
+		(system "aarch64-linux")
+		(urls ("https://github.com/roc-lang/nightlies/releases/download/nightly-2026-10-21-5349569/roc_nightly-linux_arm64-2026-10-21-5349569.tar.gz"))
+		(witness "https://api.github.com/repos/roc-lang/nightlies/releases/tags/nightly-2026-10-21-5349569")) (
+		(name "roc")
+		(obtained Published)
+		(served ())
+		(sha256 "31b1c15f5627a7144e66c26695bd3fd11c1dac2f619c256398f9134c7cc9bec6")
+		(size 73451421)
+		(system "x86_64-darwin")
+		(urls ("https://github.com/roc-lang/nightlies/releases/download/nightly-2026-10-21-5349569/roc_nightly-macos_x86_64-2026-10-21-5349569.tar.gz"))
+		(witness "https://api.github.com/repos/roc-lang/nightlies/releases/tags/nightly-2026-10-21-5349569")) (
+		(name "roc")
+		(obtained Published)
+		(served ())
+		(sha256 "a8a81b5436c69eb5bf14ddc48bd9f0ef71326fd485340a4a1a7a683db442e5a6")
+		(size 69461382)
+		(system "aarch64-darwin")
+		(urls ("https://github.com/roc-lang/nightlies/releases/download/nightly-2026-10-21-5349569/roc_nightly-macos_apple_silicon-2026-10-21-5349569.tar.gz"))
+		(witness "https://api.github.com/repos/roc-lang/nightlies/releases/tags/nightly-2026-10-21-5349569"))))
+	(format (
+		(major 2)
+		(minor 0)))
+	(hints ((
+		(provider "nix")
+		(value (Attrs ((
+			(name "identity")
+			(value (Attrs ((
+				(name "inputs")
+				(value (Attrs ((
+					(name "nix")
+					(value (Attrs ((
+						(name "ref")
+						(value (Str "github:NixOS/nixpkgs/nixos-unstable"))) (
+						(name "kind")
+						(value (Str "packages"))) (
+						(name "flake")
+						(value (Bool true))))))) (
+					(name "goose")
+					(value (Attrs ((
+						(name "ref")
+						(value (Str "path:flakes/goose"))) (
+						(name "kind")
+						(value (Str "packages"))) (
+						(name "flake")
+						(value (Bool true))))))))))) (
+				(name "overlays")
+				(value (Attrs ()))))))) (
+			(name "graph")
+			(value (Attrs ((
+				(name "root")
+				(value (Str "root"))) (
+				(name "version")
+				(value (Int 7))) (
+				(name "nodes")
+				(value (Attrs ((
+					(name "flake-utils")
+					(value (Attrs ((
+						(name "inputs")
+						(value (Attrs ((
+							(name "systems")
+							(value (Str "systems"))))))) (
+						(name "locked")
+						(value (Attrs ((
+							(name "lastModified")
+							(value (Int 1791914995))) (
+							(name "narHash")
+							(value (Str "sha256-Zf/xfQEAasnwnmEfHqW/4hjDE/s44yn2hD4RuVIZRjA="))) (
+							(name "owner")
+							(value (Str "numtide"))) (
+							(name "repo")
+							(value (Str "flake-utils"))) (
+							(name "rev")
+							(value (Str "b7a79d3fea1e214f6d668d521cecec0c01e26544"))) (
+							(name "type")
+							(value (Str "github"))))))) (
+						(name "original")
+						(value (Attrs ((
+							(name "owner")
+							(value (Str "numtide"))) (
+							(name "repo")
+							(value (Str "flake-utils"))) (
+							(name "type")
+							(value (Str "github"))))))))))) (
+					(name "goose")
+					(value (Attrs ((
+						(name "inputs")
+						(value (Attrs ((
+							(name "flake-utils")
+							(value (Str "flake-utils"))) (
+							(name "nixpkgs")
+							(value (Str "nixpkgs"))))))) (
+						(name "original")
+						(value (Attrs ((
+							(name "type")
+							(value (Str "path"))) (
+							(name "path")
+							(value (Str "flakes/goose"))))))) (
+						(name "locked")
+						(value (Attrs ((
+							(name "lastModified")
+							(value (Int 1793089731))) (
+							(name "narHash")
+							(value (Str "sha256-ligIZZSfv1WblPedz8F4EBObp7lcdF6sQf0EhGMDHJU="))) (
+							(name "type")
+							(value (Str "path"))) (
+							(name "path")
+							(value (Str "flakes/goose"))))))))))) (
+					(name "nix")
+					(value (Attrs ((
+						(name "locked")
+						(value (Attrs ((
+							(name "lastModified")
+							(value (Int 1792773339))) (
+							(name "narHash")
+							(value (Str "sha256-rZLrzrC6i+jnTAlvPZHogKDulY7WWDEv9hJeHieO7Zw="))) (
+							(name "owner")
+							(value (Str "NixOS"))) (
+							(name "repo")
+							(value (Str "nixpkgs"))) (
+							(name "rev")
+							(value (Str "3ec636362e1816bc2f0888fa0fa2c69f1bc9e504"))) (
+							(name "type")
+							(value (Str "github"))))))) (
+						(name "original")
+						(value (Attrs ((
+							(name "owner")
+							(value (Str "NixOS"))) (
+							(name "ref")
+							(value (Str "nixos-unstable"))) (
+							(name "repo")
+							(value (Str "nixpkgs"))) (
+							(name "type")
+							(value (Str "github"))))))))))) (
+					(name "nixpkgs")
+					(value (Attrs ((
+						(name "locked")
+						(value (Attrs ((
+							(name "lastModified")
+							(value (Int 1792773339))) (
+							(name "narHash")
+							(value (Str "sha256-rZLrzrC6i+jnTAlvPZHogKDulY7WWDEv9hJeHieO7Zw="))) (
+							(name "owner")
+							(value (Str "NixOS"))) (
+							(name "repo")
+							(value (Str "nixpkgs"))) (
+							(name "rev")
+							(value (Str "3ec636362e1816bc2f0888fa0fa2c69f1bc9e504"))) (
+							(name "type")
+							(value (Str "github"))))))) (
+						(name "original")
+						(value (Attrs ((
+							(name "owner")
+							(value (Str "NixOS"))) (
+							(name "repo")
+							(value (Str "nixpkgs"))) (
+							(name "rev")
+							(value (Str "3ec636362e1816bc2f0888fa0fa2c69f1bc9e504"))) (
+							(name "type")
+							(value (Str "github"))))))))))) (
+					(name "root")
+					(value (Attrs ((
+						(name "inputs")
+						(value (Attrs ((
+							(name "goose")
+							(value (Str "goose"))) (
+							(name "nix")
+							(value (Str "nix"))) (
+							(name "nixpkgs")
+							(value (List ((Str "nix"))))))))))))) (
+					(name "systems")
+					(value (Attrs ((
+						(name "locked")
+						(value (Attrs ((
+							(name "lastModified")
+							(value (Int 1681028828))) (
+							(name "narHash")
+							(value (Str "sha256-Vy1rq5AaRuLzOxct8nz4T6wlgyUR7zLU309k9mBC768="))) (
+							(name "owner")
+							(value (Str "nix-systems"))) (
+							(name "repo")
+							(value (Str "default"))) (
+							(name "rev")
+							(value (Str "da67096a3b9bf56a91d16901293e51ba5b49a27e"))) (
+							(name "type")
+							(value (Str "github"))))))) (
+						(name "original")
+						(value (Attrs ((
+							(name "owner")
+							(value (Str "nix-systems"))) (
+							(name "repo")
+							(value (Str "default"))) (
+							(name "type")
+							(value (Str "github")))))))))))))))))))))))))
+	(intent (
+		(build_sources ())
+		(inputs ())
+		(overlays ())
+		(resolvers ())
+		(sources ((
+			(name "goose")
+			(provider (
+				(name "nix")
+				(ref "path:./flakes/goose")
+				(version 1)))) (
+			(name "nix")
+			(provider (
+				(name "nix")
+				(ref "github:NixOS/nixpkgs/nixos-unstable")
+				(version 1))))))))
+	(sources ((
+		(digest "sha256:ad92ebceb0ba8be8e74c096f3d91e880a0ee958ed658312ff6125e1e278eed9c")
+		(name "nix")
+		(provider "nix")
+		(ref "github:NixOS/nixpkgs/nixos-unstable")
+		(rev "3ec636362e1816bc2f0888fa0fa2c69f1bc9e504")) (
+		(digest "sha256:ebc13f93309f7403aa22cf82cf51e89725787eb5440ab8ca9faa917da7c9748f")
+		(name "goose")
+		(provider "nix")
+		(ref "path:flakes/goose")
+		(rev "")))))
