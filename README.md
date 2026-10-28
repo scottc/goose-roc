@@ -34,24 +34,18 @@ zig version
 
 Build Goose Host:
 ```sh
-./scripts/build-host.sh
+./scripts/build-host-goose-pure.sh
+# OR
+./scripts/build-host-c-bridge.sh
 ```
 
 Build Roc App:
 ```sh
-run run app/main.roc
-# hello from goose
-# hello from roc
+roc build app/main.roc && ./main
+#0 errors and 0 warnings found in 276ms while successfully building:
+#
+#    main
+#goose-pure: bump-only host, no libc heap
+#hello from roc
+#goose runtime error: goose-pure: bump pointer as u64 not wired (/home/anon/Projects/goose-roc/hosts/goose-pure/host.goose:20)
 ```
-
-Bundle Roc Platform for redistribution:
-```sh
-roc bundle platform/main.roc
-```
-
-## Designs
-
-- [ ] Idiomatic goose (no heap allocations)
-- [ ] Roc with goose design constraints (no heap allocations)
-- [x] Idiomatic roc
-- [x] Goose with C malloc heap allocations
