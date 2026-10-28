@@ -1,15 +1,16 @@
-# goose-roc
+# Goose-Roc
 
-A [goose lang](https://github.com/aardappel/goose) [roc platform](https://roc-lang.org/) template.
+A goose lang roc platform template.
 
 > [!IMPORTANT]
-> In development, a WIP.
->
-> Only tested against linux x64musl target.
+> In development, a WIP. Only tested against linux x64musl target.
 
 ## About
 
 Let's you use goose lang as a host implementation for a roc platform.
+
+- Goose [[homepage](https://aardappel.github.io/goose/index.html)] [[github](https://github.com/aardappel/goose/)]
+- Roc [[homepage](https://roc-lang.org/)] [[github](https://github.com/roc-lang/)]
 
 ## Flavors
 
