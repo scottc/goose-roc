@@ -113,9 +113,9 @@
 						(name "locked")
 						(value (Attrs ((
 							(name "lastModified")
-							(value (Int 1793089731))) (
+							(value (Int 1793175322))) (
 							(name "narHash")
-							(value (Str "sha256-ligIZZSfv1WblPedz8F4EBObp7lcdF6sQf0EhGMDHJU="))) (
+							(value (Str "sha256-Fz8GTSXPqjFL/0bhOQtmeu9+7jSIIUAWMjIKJB6jULU="))) (
 							(name "type")
 							(value (Str "path"))) (
 							(name "path")
@@ -125,15 +125,15 @@
 						(name "locked")
 						(value (Attrs ((
 							(name "lastModified")
-							(value (Int 1792773339))) (
+							(value (Int 1793110635))) (
 							(name "narHash")
-							(value (Str "sha256-rZLrzrC6i+jnTAlvPZHogKDulY7WWDEv9hJeHieO7Zw="))) (
+							(value (Str "sha256-dhoW6VgFWlaodSY5jrBn+CF2FLmaUvDVgM7+C7T2+NM="))) (
 							(name "owner")
 							(value (Str "NixOS"))) (
 							(name "repo")
 							(value (Str "nixpkgs"))) (
 							(name "rev")
-							(value (Str "3ec636362e1816bc2f0888fa0fa2c69f1bc9e504"))) (
+							(value (Str "31ecbaca1bdefa45dffc409f0250bd8039ea0010"))) (
 							(name "type")
 							(value (Str "github"))))))) (
 						(name "original")
@@ -223,12 +223,12 @@
 				(ref "github:NixOS/nixpkgs/nixos-unstable")
 				(version 1))))))))
 	(sources ((
-		(digest "sha256:ad92ebceb0ba8be8e74c096f3d91e880a0ee958ed658312ff6125e1e278eed9c")
+		(digest "sha256:761a16e958055a56a87526398eb067f8217614b99a52f0d580cefe0bb4f6f8d3")
 		(name "nix")
 		(provider "nix")
 		(ref "github:NixOS/nixpkgs/nixos-unstable")
-		(rev "3ec636362e1816bc2f0888fa0fa2c69f1bc9e504")) (
-		(digest "sha256:ebc13f93309f7403aa22cf82cf51e89725787eb5440ab8ca9faa917da7c9748f")
+		(rev "31ecbaca1bdefa45dffc409f0250bd8039ea0010")) (
+		(digest "sha256:0944aca701d8e845c99de8c559331e85d7133579ccd195fddd24fea26719e87b")
 		(name "goose")
 		(provider "nix")
 		(ref "path:flakes/goose")

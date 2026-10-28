@@ -16,15 +16,15 @@ config = [
         ]),
         Tools([
             "goose#goose",
+            "nix#zig", # for zig cc x64musl
 
-            "nix#zig",
-            "nix#cmake",
-            "nix#ninja",
-            "nix#gcc",
-            "nix#gnumake",
-            "nix#pkg-config",
-            "nix#git",
-            "nix#python3",
+            # "nix#cmake",
+            # "nix#ninja",
+            # "nix#gcc",
+            # "nix#gnumake",
+            # "nix#pkg-config",
+            # "nix#git",
+            # "nix#python3",
         ]),
     ]),
 

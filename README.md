@@ -11,6 +11,13 @@ A [goose lang](https://github.com/aardappel/goose) [roc platform](https://roc-la
 
 Let's you use goose lang as a host implementation for a roc platform.
 
+## Flavors
+
+This project has two host implementation flavours.
+
+- `hosts/goose-pure` Pure idiomatic goose, no heap allocations, there may be design constraints on what the platform & roc apps are allowed to do.
+- `hosts/c-bridge` Goose with C malloc heap allocations, if you want to use idiomatic Roc today, you can use the existing `CGlue.roc`.
+
 ## Build & Run
 
 Install Goose, Roc & C compiler:

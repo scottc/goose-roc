@@ -13,7 +13,20 @@ let
     inherit system;
     overlays = overlays ++ [
       (final: prev: {
-        goose = final.callPackage ./package.nix { };
+        goose-unwrapped = final.callPackage ./package.nix { };
+        goose = final.buildFHSEnv {
+          pname = "goose";
+          version = "2026.3";
+          targetPkgs = p: [
+            p.goose-unwrapped
+            p.glibc
+            p.glibc.dev
+            p.gcc.cc.lib
+            p.gcc
+            p.binutils
+          ];
+          runScript = "goose";
+        };
       })
     ];
   };

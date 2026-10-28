@@ -8,5 +8,12 @@ import pf.Stdout
 main! : List(Str) => Try({}, [Exit(I32), StdoutErr(Str)])
 main! = |_args| {
     Stdout.line!("hello from roc")?
+    Stdout.line!(
+        \\hello from roc, but a very long str that would need to be heap allocated.
+        \\hello from roc, but a very long str that would need to be heap allocated.
+        \\hello from roc, but a very long str that would need to be heap allocated.
+        \\hello from roc, but a very long str that would need to be heap allocated.
+        \\hello from roc, but a very long str that would need to be heap allocated.
+    )?
     Ok({})
 }
