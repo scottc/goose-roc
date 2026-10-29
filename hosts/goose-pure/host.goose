@@ -1,5 +1,7 @@
 // Pure Goose Roc host: bump arena only. No libc malloc/free/realloc.
 
+//import ffi;
+
 let ARENA_CAP = 1048576;
 
 var arena: u8[ARENA_CAP] = [0; ARENA_CAP];
@@ -106,13 +108,27 @@ fn print_small_str(s: RocStr) {
     print(out); // Goose print adds the newline
 }
 
+extern "gs_ffi_bytes" fn ffi_bytes(p: u64, n: i64, out: u8[>..]&) -> bool;
+extern "gs_ffi_cstr"  fn ffi_cstr(p: u64, out: u8[>..]&) -> bool;
+
 fn print_roc_str(s: RocStr) {
     if is_small_str(s) {
         print_small_str(s);
         return;
     }
-    // Big / seamless: needs pointer read (e.g. ffi::bytes) or bump-backed data.
-    abort("goose-pure: non-small RocStr (heap/seamless) — use c-bridge or wire ffi");
+    let n = s.len as i64;
+    if n <= 0 {
+        print("");
+        return;
+    }
+    if s.bytes == 0 {
+        abort("goose-pure: null RocStr bytes");
+    }
+    var out: u8[>..] = [];
+    if !ffi_bytes(s.bytes, n, out) {
+        abort("goose-pure: gs_ffi_bytes failed");
+    }
+    print(out);
 }
 
 export "roc_stdout_line" fn roc_stdout_line(s: RocStr) -> HostLineResult {

@@ -1,0 +1,2 @@
+// sidecar next to host.goose (root file)
+c_sources = ["gs_ffi_polyfill.c"];

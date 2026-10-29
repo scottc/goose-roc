@@ -31,9 +31,18 @@ echo "==> zig cc (musl)"
 "${ZIG_CC[@]}" -c "$BUILD/host.c" -o "$BUILD/host.o"
 "${ZIG_CC[@]}" -c "$HOST/entry.c" -o "$BUILD/entry.o"
 
+OBJS=("$BUILD/host.o" "$BUILD/entry.o")
+
+# v2026.3: gs_ffi_* not in standalone runtime — link polyfill
+if [[ -f "$HOST/gs_ffi_polyfill.c" ]]; then
+  echo "==> zig cc gs_ffi_polyfill.c"
+  "${ZIG_CC[@]}" -c "$HOST/gs_ffi_polyfill.c" -o "$BUILD/gs_ffi_polyfill.o"
+  OBJS+=("$BUILD/gs_ffi_polyfill.o")
+fi
+
 echo "==> ar $OUT/libhost.a"
 rm -f "$OUT/libhost.a"
-ar rcs "$OUT/libhost.a" "$BUILD/host.o" "$BUILD/entry.o"
+ar rcs "$OUT/libhost.a" "${OBJS[@]}"
 
 for f in crt1.o libc.a libzigc.a libcompiler_rt.a libunwind.a; do
   if [[ -f "$VENDOR/$f" ]]; then
@@ -43,4 +52,4 @@ for f in crt1.o libc.a libzigc.a libcompiler_rt.a libunwind.a; do
 done
 
 echo "wrote $OUT/libhost.a (goose-pure)"
-nm "$OUT/libhost.a" | grep -E ' (main|goose_init|roc_alloc|roc_stderr_line|roc_stdout_line)$' || true
+nm "$OUT/libhost.a" | grep -E ' (main|goose_init|roc_alloc|roc_stderr_line|roc_stdout_line|gs_ffi_bytes)$' || true

@@ -2,3 +2,5 @@ flakes/goose/result
 platform/targets-out/
 main
 build/
+.blueprint/
+smoke_adversarial

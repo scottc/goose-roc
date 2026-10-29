@@ -3,7 +3,7 @@
 A goose lang roc platform template.
 
 > [!IMPORTANT]
-> In development, a WIP. Only tested against linux x64musl target.
+> Experimental! In development, a WIP. Only tested against linux x64musl target.
 
 ## About
 
