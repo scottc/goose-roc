@@ -2,45 +2,147 @@
 
 //import ffi;
 
-let ARENA_CAP = 1048576;
+// Soft limit only — actual storage is grow-only on the Goose data stack.
+var arena_cap: i64 = 8 * 1024 * 1024; // default until app configures
+var arena: u8[>..] = [];
+var arena_used: i64 = 0; // high-water / logical used (optional; can use arena.len)
 
-var arena: u8[ARENA_CAP] = [0; ARENA_CAP];
-var arena_used: i64 = 0;
+// Soft-limit only. Does not shrink the data stack; raises the budget.
+export "roc_configure_arena" fn roc_configure_arena(cap: u64) -> HostLineResult {
+    let c = cap as i64;
+    if c < 0 {
+        abort("goose-pure: configure_arena negative");
+    }
+    if c < arena.len {
+        abort(str(
+            "goose-pure: configure_arena ",
+            c,
+            " < already used ",
+            arena.len
+        ));
+    }
+    arena_cap = c;
+    line_ok()
+}
 
-// Old extern syntax (v2026.3):
+// parallel to arena: last alloc size for each returned ptr (linear scan is fine for smoke)
+struct Block { ptr: u64, size: i64 }
+var blocks: Block[>..] = [];
+
+fn note_alloc(p: u64, size: i64) { blocks.push(Block { ptr: p, size: size }); }
+
+fn lookup_size(p: u64) -> i64 {
+    var i = blocks.len;
+    while i > 0 {
+        i = i - 1;
+        if blocks[i].ptr == p {
+            return blocks[i].size;
+        }
+    }
+    return -1;
+}
+
 extern "gs_addr_of_u8" fn addr_of(p: u8&) -> u64;
 
 fn align_up(n: i64, a: i64) -> i64 {
     ((n + a - 1) / a) * a
 }
 
+fn sanitize_align(alignment: i64) -> i64 {
+    // Valid Roc/host aligns are 8 or 16 (sometimes 32). Anything else is ABI noise.
+    if alignment == 8 || alignment == 16 || alignment == 32 || alignment == 64 {
+        return alignment;
+    }
+    //print(str("goose-pure: clamping align ", alignment, " → 8"));
+    return 8;
+}
+
+let MAX_ONE_ALLOC: i64 = 32 * 1024 * 1024; // 32 MiB single request ceiling
+
 fn bump_alloc(size: i64, alignment: i64) -> u64 {
-    let al = if alignment < 8 { 8 } else { alignment };
-    let start = align_up(arena_used, al);
-    let end = start + size;
-    if end > ARENA_CAP {
-        abort("goose-pure: bump arena exhausted");
+    let al = sanitize_align(alignment);
+    if size < 0 {
+        abort(str("goose-pure: negative size ", size));
     }
-    // Optional: zero the slab (Roc often writes fully; safe either way)
-    for i in size {
-        arena[start + i] = 0;
+    if size > MAX_ONE_ALLOC {
+        abort(str("goose-pure: alloc too large size=", size, " align=", alignment));
     }
-    arena_used = end;
-    // arena[start] is an lvalue → u8& into the fixed global
+
+    let padding = align_up(arena.len, al) - arena.len;
+    let need = padding + size;
+    if need > arena_cap - arena.len {
+        abort(str(
+            "goose-pure: arena soft limit (cap=",
+            arena_cap,
+            " used=",
+            arena.len,
+            " need=",
+            need,
+            " size=",
+            size,
+            " raw_align=",
+            alignment,
+            ")"
+        ));
+    }
+    for _ in padding {
+        arena.push(0);
+    }
+    let start = arena.len;
+    for _ in size {
+        arena.push(0);
+    }
     return addr_of(arena[start]);
 }
 
 export "roc_alloc" fn roc_alloc(size: u64, alignment: u32) -> u64 {
-    bump_alloc(size as i64, alignment)
+    // Keep width explicit; reject sizes that don't fit i64 budgets
+    if size > 0x7fffffff {
+        abort(str("goose-pure: roc_alloc size doesn't fit budget: ", size, " align ", alignment));
+    }
+    //print(str("alloc ", size, " ", alignment));
+    let p = bump_alloc(size as i64, alignment);
+    note_alloc(p, size as i64);
+    return p;
+}
+
+extern "gs_memmove_u64" fn memmove_u64(dst: u64, src: u64, n: i64);
+
+export "roc_realloc" fn roc_realloc(ptr: u64, new_size: u64, old_size: u64, alignment: u32) -> u64 {
+    //print(str("realloc ptr=", ptr, " new=", new_size, " old=", old_size, " align=", alignment));
+    if new_size > 0x7fffffff {
+        abort(str("goose-pure: roc_realloc huge new_size=", new_size));
+    }
+    let np = bump_alloc(new_size as i64, alignment);
+    if ptr != 0 {
+        var n = old_size;
+        if new_size < n {
+            n = new_size;
+        }
+        if n > 0 {
+            let tracked = lookup_size(ptr); // from note_alloc on every alloc/realloc
+            var n: i64 = 0;
+            if tracked >= 0 {
+                n = tracked;
+            } else {
+                n = old_size as i64;
+            }
+            if n > new_size as i64 {
+                n = new_size as i64;
+            }
+            if n < 0 {
+                n = 0;
+            }
+            memmove_u64(np, ptr, n);
+            note_alloc(np, new_size as i64);
+            //print("printing one line after memmove_u64");
+        }
+    }
+    return np;
 }
 
 export "roc_dealloc" fn roc_dealloc(_ptr: u64, _alignment: u32) {
-    // Bump: no free
-}
-
-export "roc_realloc" fn roc_realloc(_ptr: u64, new_size: u64, _old: u64, alignment: u32) -> u64 {
-    // Bump policy: allocate fresh, leak old (no shrink/move)
-    bump_alloc(new_size as i64, alignment)
+    //print("WARN roc_dealloc was called, but goose has grow-only never-free arena pointer data stacks, so this is a no-op & an unnesssary fn call.");
 }
 
 export "roc_dbg" fn roc_dbg(_loc: u64, _msg: u64) {
@@ -115,6 +217,7 @@ fn print_small_str(s: RocStr) {
     for i in n {
         out.push(rocstr_byte(s, i));
     }
+    //print(str("sso bytes=", s.bytes, " cap=", s.cap, " len=", s.len));
     print(out); // Goose print adds the newline
 }
 
@@ -155,8 +258,10 @@ export "roc_stderr_line" fn roc_stderr_line(s: RocStr) -> HostLineResult {
 extern fn roc_main() -> i32; // adjust once arg layout is known
 
 fn main() {
-    print("goose-pure: bump-only host, no libc heap");
-    arena_used = 0;
+    //print("goose-pure: grow-only bump, app sets soft cap");
+    arena.clear(); // or leave empty; reset used
+    arena_cap = 8 * 1024 * 1024; // 8MiB default.
     let code = roc_main();
-    exit(code);
+    //print(str("goose-pure: roc_main returned ", code));
+    exit(code);  // or return and let process end without gs_exit if that is safer
 }

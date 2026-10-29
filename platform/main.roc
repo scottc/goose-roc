@@ -1,9 +1,10 @@
 platform "goose"
     requires {} { main! : List(Str) => Try({}, [Exit(I32), ..]) }
-    exposes [Stdout, Stderr]
+    exposes [Arena, Stdout, Stderr]
     packages { roc: "nightly-2026-10-21-5349569" }
     provides { "roc_main": main_for_host! }
     hosted {
+        "roc_configure_arena": Host.configure_arena!,
         "roc_stdout_line": Host.stdout_line!,
         "roc_stderr_line": Host.stderr_line!,
     }
@@ -21,9 +22,10 @@ platform "goose"
         },
     }
 
+import Host
+import Arena
 import Stdout
 import Stderr
-import Host
 
 main_for_host! : List(Str) => I32
 main_for_host! = |args| {

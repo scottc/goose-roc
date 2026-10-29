@@ -42,3 +42,8 @@ uint8_t gs_ffi_cstr(uint64_t p, gs_rref out) {
 uint64_t gs_addr_of_u8(uint8_t *p) {
     return (uint64_t)(uintptr_t)p;
 }
+
+void gs_memmove_u64(uint64_t dst, uint64_t src, int64_t n) {
+    if (n <= 0 || dst == 0 || src == 0) return;
+    memmove((void *)(uintptr_t)dst, (const void *)(uintptr_t)src, (size_t)n);
+}
