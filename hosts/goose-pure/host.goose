@@ -7,6 +7,9 @@ let ARENA_CAP = 1048576;
 var arena: u8[ARENA_CAP] = [0; ARENA_CAP];
 var arena_used: i64 = 0;
 
+// Old extern syntax (v2026.3):
+extern "gs_addr_of_u8" fn addr_of(p: u8&) -> u64;
+
 fn align_up(n: i64, a: i64) -> i64 {
     ((n + a - 1) / a) * a
 }
@@ -18,19 +21,26 @@ fn bump_alloc(size: i64, alignment: i64) -> u64 {
     if end > ARENA_CAP {
         abort("goose-pure: bump arena exhausted");
     }
+    // Optional: zero the slab (Roc often writes fully; safe either way)
+    for i in size {
+        arena[start + i] = 0;
+    }
     arena_used = end;
-    abort("goose-pure: bump pointer as u64 not wired");
+    // arena[start] is an lvalue → u8& into the fixed global
+    return addr_of(arena[start]);
 }
 
 export "roc_alloc" fn roc_alloc(size: u64, alignment: u32) -> u64 {
-    bump_alloc(size as i64, alignment)  // u32 → i64 is implicit
+    bump_alloc(size as i64, alignment)
 }
 
 export "roc_dealloc" fn roc_dealloc(_ptr: u64, _alignment: u32) {
+    // Bump: no free
 }
 
-export "roc_realloc" fn roc_realloc(_ptr: u64, _new_size: u64, _old: u64, _alignment: u32) -> u64 {
-    abort("goose-pure: roc_realloc not supported on bump arena")
+export "roc_realloc" fn roc_realloc(_ptr: u64, new_size: u64, _old: u64, alignment: u32) -> u64 {
+    // Bump policy: allocate fresh, leak old (no shrink/move)
+    bump_alloc(new_size as i64, alignment)
 }
 
 export "roc_dbg" fn roc_dbg(_loc: u64, _msg: u64) {

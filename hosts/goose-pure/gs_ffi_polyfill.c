@@ -36,3 +36,9 @@ uint8_t gs_ffi_cstr(uint64_t p, gs_rref out) {
     gs_bld_append(out, s, (int64_t)strlen(s));
     return 1;
 }
+
+/* Address of a Goose u8& for Roc / other foreign runtimes.
+ * Goose has no ref→integer cast; C receives the pointer. */
+uint64_t gs_addr_of_u8(uint8_t *p) {
+    return (uint64_t)(uintptr_t)p;
+}
