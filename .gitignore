@@ -4,3 +4,4 @@ main
 build/
 .blueprint/
 smoke_adversarial
+hosts/goose-pure/roc_platform_abi.goose

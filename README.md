@@ -16,15 +16,15 @@ Let's you use goose lang as a host implementation for a roc platform.
 
 This project has two host implementation flavours.
 
-- `hosts/goose-pure` Pure idiomatic goose, no heap allocations, there may be design constraints on what the platform & roc apps are allowed to do.
-- `hosts/c-bridge` Goose with C malloc heap allocations, if you want to use idiomatic Roc today, you can use the existing `CGlue.roc`.
+- `hosts/goose-pure` Pure idiomatic goose, no heap allocations, there may be design constraints on what the platform & roc apps are required to do.
+- `hosts/c-bridge` Goose with C malloc heap allocations, an escape hatch just in case you need heap allocations.
 
 ## Build & Run
 
 Install Goose, Roc & C compiler:
 
 ```sh
-nix run github:lukewilliamboswell/roc-blueprint/0.8.0 -- shell
+nix run github:lukewilliamboswell/roc-blueprint/0.11.0 -- shell
 roc version
 goose version
 zig version
@@ -49,4 +49,12 @@ roc build app/main.roc && ./main
 #goose-pure: bump-only host, no libc heap
 #hello from roc
 #goose runtime error: goose-pure: bump pointer as u64 not wired (/home/anon/Projects/goose-roc/hosts/goose-pure/host.goose:20)
+```
+
+## GooseGlue.roc
+
+```sh
+roc glue glue/GooseGlue.roc hosts/goose-pure/ platform/main.roc
+# Glue spec returned 1 file(s):
+#   Wrote: hosts/goose-pure/roc_platform_abi.goose
 ```

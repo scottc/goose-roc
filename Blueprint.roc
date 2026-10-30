@@ -1,6 +1,4 @@
-app [config] {
-    pf: platform "https://github.com/lukewilliamboswell/roc-blueprint/releases/download/0.8.0/FbJymjYdCxx9vqMcau7r4tQfeAbnVGqqJoYrLGqPCqKu.tar.zst",
-}
+app [config] { pf: platform "https://github.com/lukewilliamboswell/roc-blueprint/releases/download/0.11.0/EuSPs8vc71qJNFg29YzegvVRL1bR9pKqUYDHFiSCPTQ1.tar.zst" }
 
 import pf.Recipes
 
@@ -12,7 +10,7 @@ config = [
 
     Environment("dev", [
         Programs([
-            Fetch("roc", Recipes.roc_nightly("nightly-2026-10-21-5349569")),
+            Fetch("roc", Recipes.roc_nightly("nightly-2026-10-28-bad769b")),
         ]),
         Tools([
             "goose#goose",
