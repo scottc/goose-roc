@@ -164,25 +164,31 @@ struct RocStr {
     len: u64,
 }
 
+struct RocList {
+    bytes: u64,
+    length: u64,
+    capacity_or_other: u64,
+}
+
 struct HostLineResult {
     p0: u64,
     p1: u64,
     p2: u64,
     tag: u8,
-    _0: u8,
-    _1: u8,
-    _2: u8,
-    _3: u8,
-    _4: u8,
-    _5: u8,
-    _6: u8,
+    _pad0: u8,
+    _pad1: u8,
+    _pad2: u8,
+    _pad3: u8,
+    _pad4: u8,
+    _pad5: u8,
+    _pad6: u8,
 }
 
 fn line_ok() -> HostLineResult {
     HostLineResult {
         p0: 0, p1: 0, p2: 0,
-        tag: 1,
-        _0: 0, _1: 0, _2: 0, _3: 0, _4: 0, _5: 0, _6: 0,
+        tag: 1, // Ok
+        _pad0: 0, _pad1: 0, _pad2: 0, _pad3: 0, _pad4: 0, _pad5: 0, _pad6: 0,
     }
 }
 
@@ -255,13 +261,22 @@ export "roc_stderr_line" fn roc_stderr_line(s: RocStr) -> HostLineResult {
     line_ok()
 }
 
-extern fn roc_main() -> i32; // adjust once arg layout is known
+fn empty_roc_list() -> RocList {
+    RocList { bytes: 0, length: 0, capacity_or_other: 0 }
+}
+
+// Prefer an explicit C symbol if Goose allows it:
+extern "roc_main" fn roc_main(args: RocList) -> i32;
 
 fn main() {
-    //print("goose-pure: grow-only bump, app sets soft cap");
-    arena.clear(); // or leave empty; reset used
-    arena_cap = 8 * 1024 * 1024; // 8MiB default.
-    let code = roc_main();
-    //print(str("goose-pure: roc_main returned ", code));
-    exit(code);  // or return and let process end without gs_exit if that is safer
+    arena.clear();
+    blocks.clear();
+    arena_cap = 8 * 1024 * 1024;
+
+    var args = empty_roc_list();
+    let code = roc_main(args);
+    // Prefer return via C main; if you must:
+    // exit(code);
+    // For now, still fine to exit once ABI is fixed:
+    exit(code);
 }

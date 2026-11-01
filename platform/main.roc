@@ -1,7 +1,7 @@
 platform "goose"
     requires {} { main! : List(Str) => Try({}, [Exit(I32), ..]) }
     exposes [Arena, Stdout, Stderr]
-    packages { roc: "nightly-2026-10-21-5349569" }
+    packages { }
     provides { "roc_main": main_for_host! }
     hosted {
         "roc_configure_arena": Host.configure_arena!,
