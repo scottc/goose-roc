@@ -2,9 +2,9 @@ import Host
 
 Stdout := [].{
     line! : Str => Try({}, [StdoutErr(Str)])
-    line! = |message|
-        match Host.stdout_line!(message) {
-            Ok({}) => Ok({})
-            Err(StdoutErr(e)) => Err(StdoutErr(e))
-        }
+    line! = |msg| Host.stdout_line!(msg)
+
+    ## Optional: raw bytes, no trailing newline policy in host
+    bytes! : List(U8) => Try({}, [StdoutErr(Str)])
+    bytes! = |b| Host.stdout_bytes!(b)
 }

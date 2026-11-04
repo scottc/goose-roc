@@ -194,7 +194,7 @@ fn impl_roc_stderr_line(arg0: RocStr) -> HostStderrLineResult {
     }
 }
 
-fn impl_roc_configure_arena(arg0: u64) -> HostConfigureArenaResult {
+fn impl_roc_bump_set_limit_bytes(arg0: u64) -> HostConfigureArenaResult {
     let c = arg0 as i64;
     if c < 0 {
         abort("goose-pure: configure_arena negative");

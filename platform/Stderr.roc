@@ -2,9 +2,8 @@ import Host
 
 Stderr := [].{
     line! : Str => Try({}, [StderrErr(Str)])
-    line! = |message|
-        match Host.stderr_line!(message) {
-            Ok({}) => Ok({})
-            Err(StderrErr(e)) => Err(StderrErr(e))
-        }
+    line! = |msg| Host.stderr_line!(msg)
+
+    bytes! : List(U8) => Try({}, [StderrErr(Str)])
+    bytes! = |b| Host.stderr_bytes!(b)
 }

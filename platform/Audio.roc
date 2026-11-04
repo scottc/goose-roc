@@ -1,16 +1,22 @@
-module [init!, shutdown!, play_tone!, stop_all!]
-
 import Host
 
-init! : {} => Try({}, [AudioErr(Str)])
-init! = |_| Host.audio_init!({})
+Audio := {}.
+{
+    init! : {} => Try({}, [AudioErr(Str)])
+    init! = |_| Host.audio_init!({})
 
-shutdown! : {} => Try({}, [AudioErr(Str)])
-shutdown! = |_| Host.audio_shutdown!({})
+    shutdown! : {} => Try({}, [AudioErr(Str)])
+    shutdown! = |_| Host.audio_shutdown!({})
 
-## Procedural beep; voice handle for later stop/priority.
-play_tone! : F32, F32, F32 => Try(U64, [AudioErr(Str)])
-play_tone! = |freq_hz, seconds, gain| Host.audio_play_tone!(freq_hz, seconds, gain)
+    play_tone! : F32, F32, F32 => Try(U64, [AudioErr(Str)])
+    play_tone! = |hz, sec, gain| Host.audio_play_tone!(hz, sec, gain)
 
-stop_all! : {} => Try({}, [AudioErr(Str)])
-stop_all! = |_| Host.audio_stop_all!({})
+    stop! : U64 => Try({}, [AudioErr(Str)])
+    stop! = |voice| Host.audio_stop!(voice)
+
+    stop_all! : {} => Try({}, [AudioErr(Str)])
+    stop_all! = |_| Host.audio_stop_all!({})
+
+    set_master_gain! : F32 => Try({}, [AudioErr(Str)])
+    set_master_gain! = |g| Host.audio_set_master_gain!(g)
+}
