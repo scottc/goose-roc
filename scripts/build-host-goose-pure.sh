@@ -24,6 +24,7 @@ done
 
 # Optional bridges (impl_roc_* for os/math/gfx/…). Missing file = skip with a note.
 BRIDGES=(
+  "$BRIDGE/result_helpers.goose"   # optional
   "$BRIDGE/math_bridge.goose"
   "$BRIDGE/os_bridge.goose"
   "$BRIDGE/gfx_bridge.goose"
