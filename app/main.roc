@@ -2,18 +2,18 @@ app [main!] {
     pf: platform "../platform/main.roc",
 }
 
-import pf.Arena
+import pf.Bump
 import pf.Stdout
 
-main! : List(Str) => Try({}, [Exit(I32), StdoutErr(Str), ArenaErr(Str)])
+main! : List(Str) => Try({}, [Exit(I32)])
 main! = |_args| {
-    # Arena.configure!(64 * 1024 * 1024) # 64MiB
+    # Bump.configure!(64 * 1024 * 1024) # 64MiB
     #     .map_err(|ArenaErr(e)| ArenaErr(e))?
 
-    Stdout.line!("hello from roc")?
+    _ = Stdout.line!("hello from roc")
 
     # # Grow arena at runtime!
-    # Arena.configure!(256 * 1024 * 1024) # 256MiB
+    # Bump.configure!(256 * 1024 * 1024) # 256MiB
     #     .map_err(|ArenaErr(e)| ArenaErr(e))?
 
     # Stdout.line!(
