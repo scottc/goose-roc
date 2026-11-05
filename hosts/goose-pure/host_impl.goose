@@ -194,7 +194,15 @@ fn impl_roc_stderr_line(arg0: RocStr) -> HostStderrLineResult {
     }
 }
 
-fn impl_roc_bump_set_limit_bytes(arg0: u64) -> HostConfigureArenaResult {
+fn impl_roc_stdout_bytes(arg0: RocList) -> HostStdoutLineResult {
+    abort("impl_roc_stdout_bytes");
+}
+
+fn impl_roc_stderr_bytes(arg0: RocList) -> HostStderrLineResult {
+    abort("impl_roc_stderr_bytes");
+}
+
+fn impl_roc_bump_set_limit_bytes(arg0: u64) -> HostBumpSetLimitBytesResult {
     let c = arg0 as i64;
     if c < 0 {
         abort("goose-pure: configure_arena negative");
@@ -203,12 +211,21 @@ fn impl_roc_bump_set_limit_bytes(arg0: u64) -> HostConfigureArenaResult {
         abort(str("goose-pure: configure_arena ", c, " < used ", arena.len));
     }
     arena_cap = c;
-    HostConfigureArenaResult {
+    HostBumpSetLimitBytesResult {
         p0: 0, p1: 0, p2: 0,
         tag: 1,
         _pad0: 0, _pad1: 0, _pad2: 0, _pad3: 0, _pad4: 0, _pad5: 0, _pad6: 0,
     }
 }
+
+fn impl_roc_bump_used_bytes() -> HostBumpUsedBytesResult {
+    abort("impl_roc_bump_used_bytes");
+}
+
+fn impl_roc_bump_limit_bytes() -> HostBumpUsedBytesResult {
+    abort("impl_roc_bump_limit_bytes");
+}
+
 
 fn empty_roc_list() -> RocList {
     RocList { bytes: 0, length: 0, capacity_or_other: 0 }

@@ -21,3 +21,15 @@ fn impl_roc_phys_body_set_transform(body: u64, x: f32, y: f32, angle: f32) -> Ho
 fn impl_roc_phys_body_get_transform(body: u64) -> HostPhysBodyGetTransformResult {
     abort("impl_roc_phys_body_get_transform: not implemented");
 }
+
+fn impl_roc_phys_body_destroy(arg0: u64) -> HostPhysWorldStepResult {
+    abort("impl_roc_phys_body_destroy");
+}
+
+fn impl_roc_phys_body_set_velocity(arg0: u64, arg1: f32, arg2: f32, arg3: f32) -> HostPhysWorldStepResult {
+    abort("impl_roc_phys_body_set_velocity");
+}
+
+fn impl_roc_phys_body_get_velocity(arg0: u64) -> HostPhysBodyGetVelocityResult {
+    abort("impl_roc_phys_body_get_velocity");
+}
