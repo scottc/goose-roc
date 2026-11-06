@@ -22,7 +22,7 @@ Let's you use goose lang as a host implementation for a roc platform.
 - [ ] **Os** via Linux, Windows & MacOS kernal syscalls.
 - [ ] **Physics** (Errors, Values, Worlds, Bodies, Shapes, Geometry, Joints, Events, Queries, character_mover, recording & replay) via Box3D
 - [ ] **UI** (Errors, Contexts, Input, Text rendering, Game HUDs, Fonts, Windows, Layout, Groups, Trees, List views, widgets, text editing, popups, combo boxes, menus, tooltops, charts, style, colors, images, rectangles, drawing, render) via SDL3
-- [ ] **Network** [[Issue#113](https://github.com/aardappel/goose/issues/113)] [[Issue#165](https://github.com/aardappel/goose/issues/165)]
+- [ ] **Network** [[Issue#113](https://github.com/aardappel/goose/issues/113)] [[Issue#165](https://github.com/aardappel/goose/issues/165)] [[kaitk/goose-http](https://github.com/kaitk/goose-http)/[shim/net.c](https://github.com/kaitk/goose-http/blob/main/shim/net.c)]
 
 ## Targets
 
