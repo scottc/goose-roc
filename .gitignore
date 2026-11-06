@@ -3,3 +3,4 @@ platform/targets-out/
 main
 build/
 .blueprint/
+.cache/goose-roc-host/x64glibc/

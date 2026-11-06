@@ -57,3 +57,9 @@ uint64_t gs_f64_bits(double x) {
     memcpy(&u, &x, sizeof u);
     return u;
 }
+
+uint64_t gs_f32_bits(float x) {
+    uint32_t u;
+    memcpy(&u, &x, 4);
+    return (uint64_t)u;
+}

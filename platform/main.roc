@@ -4,15 +4,16 @@ platform "goose"
     packages { }
     provides { "roc_main": main_for_host! }
     hosted {
-        "roc_bump_set_limit_bytes": Host.bump_set_limit_bytes!,
-        "roc_bump_used_bytes": Host.bump_used_bytes!,
-        "roc_bump_limit_bytes": Host.bump_limit_bytes!,
-
+        # ---- core I/O / bump ----
         "roc_stdout_line": Host.stdout_line!,
         "roc_stderr_line": Host.stderr_line!,
         "roc_stdout_bytes": Host.stdout_bytes!,
         "roc_stderr_bytes": Host.stderr_bytes!,
+        "roc_bump_set_limit_bytes": Host.bump_set_limit_bytes!,
+        "roc_bump_used_bytes": Host.bump_used_bytes!,
+        "roc_bump_limit_bytes": Host.bump_limit_bytes!,
 
+        # ---- math ----
         "roc_math_sin": Host.math_sin!,
         "roc_math_cos": Host.math_cos!,
         "roc_math_tan": Host.math_tan!,
@@ -28,6 +29,7 @@ platform "goose"
         "roc_math_ceil": Host.math_ceil!,
         "roc_math_abs": Host.math_abs!,
 
+        # ---- os ----
         "roc_os_read_file": Host.os_read_file!,
         "roc_os_write_file": Host.os_write_file!,
         "roc_os_append_file": Host.os_append_file!,
@@ -45,8 +47,10 @@ platform "goose"
         "roc_os_env_set": Host.os_env_set!,
         "roc_os_env_list": Host.os_env_list!,
 
+        # ---- gfx (window / frame) ----
         "roc_gfx_init": Host.gfx_init!,
         "roc_gfx_shutdown": Host.gfx_shutdown!,
+        "roc_gfx_frame": Host.gfx_frame!,
         "roc_gfx_poll": Host.gfx_poll!,
         "roc_gfx_clear": Host.gfx_clear!,
         "roc_gfx_present": Host.gfx_present!,
@@ -54,6 +58,23 @@ platform "goose"
         "roc_gfx_set_title": Host.gfx_set_title!,
         "roc_gfx_draw_rect": Host.gfx_draw_rect!,
 
+        # ---- gfx (input) ----
+        "roc_gfx_key_down": Host.gfx_key_down!,
+        "roc_gfx_key_pressed": Host.gfx_key_pressed!,
+        "roc_gfx_mouse_delta": Host.gfx_mouse_delta!,
+        "roc_gfx_mouse_pos": Host.gfx_mouse_pos!,
+        "roc_gfx_mouse_down": Host.gfx_mouse_down!,
+        "roc_gfx_set_mouse_relative": Host.gfx_set_mouse_relative!,
+        "roc_gfx_set_cursor_visible": Host.gfx_set_cursor_visible!,
+        "roc_gfx_delta_time": Host.gfx_delta_time!,
+
+        # ---- gfx (textures) ----
+        "roc_gfx_texture_create": Host.gfx_texture_create!,
+        "roc_gfx_texture_destroy": Host.gfx_texture_destroy!,
+        "roc_gfx_texture_upload_rgba": Host.gfx_texture_upload_rgba!,
+        "roc_gfx_draw_textured_quad": Host.gfx_draw_textured_quad!,
+
+        # ---- audio ----
         "roc_audio_init": Host.audio_init!,
         "roc_audio_shutdown": Host.audio_shutdown!,
         "roc_audio_play_tone": Host.audio_play_tone!,
@@ -61,6 +82,7 @@ platform "goose"
         "roc_audio_stop_all": Host.audio_stop_all!,
         "roc_audio_set_master_gain": Host.audio_set_master_gain!,
 
+        # ---- physics ----
         "roc_phys_world_create": Host.phys_world_create!,
         "roc_phys_world_step": Host.phys_world_step!,
         "roc_phys_world_destroy": Host.phys_world_destroy!,
@@ -71,6 +93,7 @@ platform "goose"
         "roc_phys_body_set_velocity": Host.phys_body_set_velocity!,
         "roc_phys_body_get_velocity": Host.phys_body_get_velocity!,
 
+        # ---- ui ----
         "roc_ui_frame_begin": Host.ui_frame_begin!,
         "roc_ui_frame_end": Host.ui_frame_end!,
         "roc_ui_text": Host.ui_text!,
@@ -80,16 +103,38 @@ platform "goose"
     }
     targets: {
         inputs_dir: "targets-out/",
-        x64musl: {
+        x64glibc: {
             inputs: [
                 "crt1.o",
+                "crti.o",
                 "libhost.a",
                 app,
+                "libgoose_gfx.a",
+                "libgoose_audio.a",
+                "libgoose_ui.a",
+                "libSDL3.a",
+                "libm.a",
+                "libpthread.a",
+                "libdl.a",
+                "librt.a",
+                "libutil.a",
+                "libresolv.a",
                 "libc.a",
-                "libzigc.a",
-                "libcompiler_rt.a",
+                "libgcc.a",
+                "libgcc_eh.a",
+                "crtn.o",
             ],
         },
+        # x64musl: {
+        #     inputs: [
+        #         "crt1.o",
+        #         "libhost.a",
+        #         app,
+        #         "libc.a",
+        #         "libzigc.a",
+        #         "libcompiler_rt.a",
+        #     ],
+        # },
     }
 
 import Audio

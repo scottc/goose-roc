@@ -62,12 +62,14 @@ goose --standalone --header "$BUILD/host.h" -o "$BUILD/host.c" "$BUILD/host_all.
 
 echo "==> zig cc (musl)"
 "${ZIG_CC[@]}" -c "$BUILD/host.c" -o "$BUILD/host.o"
-"${ZIG_CC[@]}" -c "$HOST/gs_ffi_polyfill.c" -o "$BUILD/gs_ffi_polyfill.o"
 "${ZIG_CC[@]}" -c "$HOST/entry.c" -o "$BUILD/entry.o"
+
+"${ZIG_CC[@]}" -c "$HOST/gs_ffi_polyfill.c" -o "$BUILD/gs_ffi_polyfill.o"
+"${ZIG_CC[@]}" -c "$HOST/gs_gfx_upload.c" -o "$BUILD/gs_gfx_upload.o"
 
 echo "==> ar $OUT/libhost.a"
 rm -f "$OUT/libhost.a"
-ar rcs "$OUT/libhost.a" "$BUILD/host.o" "$BUILD/gs_ffi_polyfill.o" "$BUILD/entry.o"
+ar rcs "$OUT/libhost.a" "$BUILD/host.o" "$BUILD/gs_ffi_polyfill.o" "$BUILD/gs_gfx_upload.o" "$BUILD/entry.o"
 
 for f in crt1.o libc.a libzigc.a libcompiler_rt.a libunwind.a; do
   if [[ -f "$VENDOR/$f" ]]; then

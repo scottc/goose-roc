@@ -64,15 +64,35 @@ Host :: [].{
     os_env_set! : Str, Str => Try({}, [OsErr(Str)])
     os_env_list! : {} => Try(List({ key: Str, value: Str }), [OsErr(Str)])
 
-    # Gfx
+    # Gfx — Goose gfx singleton (win token: 0 closed, 1 open)
     gfx_init! : Str, I32, I32 => Try(U64, [GfxErr(Str)])
     gfx_shutdown! : U64 => Try({}, [GfxErr(Str)])
-    gfx_poll! : U64 => Try(GfxEvent, [GfxErr(Str)])
-    gfx_clear! : U64, F32, F32, F32, F32 => Try({}, [GfxErr(Str)])
-    gfx_present! : U64 => Try({}, [GfxErr(Str)])
+    gfx_frame! : U64 => Try(Bool, [GfxErr(Str)])           # gfx::frame() — advances input + presents
+    gfx_poll! : U64 => Try(GfxEvent, [GfxErr(Str)])        # best-effort synthetic event
+    gfx_clear! : U64, F32, F32, F32, F32 => Try({}, [GfxErr(Str)])  # begin_screen clear color
+    gfx_present! : U64 => Try({}, [GfxErr(Str)])           # end_pass + no-op if frame! used
     gfx_window_size! : U64 => Try({ width: I32, height: I32 }, [GfxErr(Str)])
     gfx_set_title! : U64, Str => Try({}, [GfxErr(Str)])
     gfx_draw_rect! : U64, F32, F32, F32, F32, F32, F32, F32, F32 => Try({}, [GfxErr(Str)])
+
+    # Input (queried after frame! / during frame)
+    gfx_key_down! : U64, Str => Try(Bool, [GfxErr(Str)])
+    gfx_key_pressed! : U64, Str => Try(Bool, [GfxErr(Str)])
+    gfx_mouse_delta! : U64 => Try({ dx: F32, dy: F32 }, [GfxErr(Str)])
+    gfx_mouse_pos! : U64 => Try({ x: F32, y: F32 }, [GfxErr(Str)])
+    gfx_mouse_down! : U64, I32 => Try(Bool, [GfxErr(Str)])
+    gfx_set_mouse_relative! : U64, Bool => Try({}, [GfxErr(Str)])
+    gfx_set_cursor_visible! : U64, Bool => Try({}, [GfxErr(Str)])
+    gfx_delta_time! : U64 => Try(F64, [GfxErr(Str)])
+
+    # Textures (RGBA8 upload for atlas / framebuffer)
+    gfx_texture_create! : I32, I32 => Try(U64, [GfxErr(Str)])     # returns texture id as U64
+    gfx_texture_destroy! : U64 => Try({}, [GfxErr(Str)])
+    gfx_texture_upload_rgba! : U64, List(U8) => Try({}, [GfxErr(Str)])  # w*h*4 bytes
+    gfx_draw_textured_quad! :
+        U64, F32, F32, F32, F32, U64, F32, F32, F32, F32
+        => Try({}, [GfxErr(Str)])
+        # win, x,y,w,h, tex, u0,v0,u1,v1  — screen-space blit (host may approximate)
 
     # Audio
     audio_init! : {} => Try({}, [AudioErr(Str)])
