@@ -29,7 +29,7 @@ Let's you use goose lang as a host implementation for a roc platform.
 - [ ] **Linux** (x64glibc)
 - [ ] **Windows**
 - [ ] **MacOS**
-- [ ] **Wasm** [[Issue#134](https://github.com/aardappel/goose/issues/134)]
+- [ ] **Wasm** [[Issue#134](https://github.com/aardappel/goose/issues/134)] [[compusophy/goose-wasm](https://github.com/compusophy/goose-wasm)]
 
 ## Build & Run
 
