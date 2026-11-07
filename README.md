@@ -45,35 +45,32 @@ Generate Glue & Build Goose Host:
 
 Build & Run Roc App:
 ```sh
-roc build app/main.roc && ./main
+roc build app/main.roc
 ```
 ```
 0 errors and 0 warnings found in 213ms while successfully building:
 
     main
-Could not start dynamically linked executable: ./main
-NixOS cannot run dynamically linked executables intended for generic
-linux environments out of the box. For more information, see:
-https://nix.dev/permalink/stub-ld
 ```
+> [!IMPORTANT]
+> Depends on dynamically linked glibc, so on NixOS you must use `nix-ld` or `steam-run`, to run the app.
 
 Build & Run Mini Doom Port:
 ```sh
-./scripts/run-mini-doom.sh
+./scripts/build-mini-doom.sh
 ```
-```
-roc build                                        2.4s
-0 errors and 0 warnings found in 2.4s while successfully building:
 
-    main
-==> strip PT_INTERP
-PT_INTERP -> PT_NULL (phdr 1)
-./main: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), statically linked, for GNU/Linux 3.10.0, BuildID[sha1]=a3d84bf64bbe2340a55f98035861e4777707798a, with debug_info, not stripped
-build-mini-doom ok: /home/anon/Projects/goose-roc/app/mini_doom/main
-==> running ./main
-mini doom: reading assets/freedoom1-e1m1.wad
-mini doom: actors=291 at (-416, 256)
-Segmentation fault         (core dumped) ./scripts/run-mini-doom.sh
+> [!IMPORTANT]
+> Depends on dynamically linked glibc, so on NixOS you must use `nix-ld` or `steam-run`, to run the app.
+> Under the hood we
+
+Steam run:
+```sh
+cd app/mini_doom
+NIXPKGS_ALLOW_UNFREE=1 nix shell nixpkgs#steam-run --impure -c \
+  steam-run env SDL_VIDEODRIVER=x11 \
+  VK_ICD_FILENAMES=/run/opengl-driver/share/vulkan/icd.d/intel_icd.x86_64.json \
+  ./main
 ```
 
 ## GooseGlue.roc

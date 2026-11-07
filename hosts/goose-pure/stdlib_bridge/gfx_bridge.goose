@@ -70,14 +70,6 @@ fn gfx_init_ok(id: u64) -> HostGfxInitResult {
     }
 }
 
-fn gfx_init_err(msg: const u8[:]) -> HostGfxInitResult {
-    let s = gfx_bytes_to_rocstr(msg);
-    HostGfxInitResult {
-        p0: s.bytes, p1: s.cap, p2: s.len, tag: 0,
-        _pad0: 0, _pad1: 0, _pad2: 0, _pad3: 0, _pad4: 0, _pad5: 0, _pad6: 0,
-    }
-}
-
 // All Try(Bool, [GfxErr(Str)]) → HostGfxFrameResult (glue dedupe)
 fn gfx_bool_ok(v: bool) -> HostGfxFrameResult {
     let bit: u64 = if v { 1 } else { 0 };
@@ -177,26 +169,68 @@ fn gfx_poll_err(msg: const u8[:]) -> HostGfxPollResult {
     }
 }
 
+// Pack a short C-ish message as Roc small-string (64-bit LE).
+// Last byte of the 24-byte value holds length with high bit set (same as your is_small_str).
+fn rocstr_sso_from_msg(msg: const u8[:]) -> RocStr {
+    var n = msg.len;
+    if n > 23 {
+        n = 23;
+    }
+    var b0: u64 = 0;
+    var b1: u64 = 0;
+    var b2: u64 = 0;
+    for i in n {
+        let byte = msg[i] as u64;
+        if i < 8 {
+            b0 = b0 | (byte << (i * 8));
+        } else if i < 16 {
+            b1 = b1 | (byte << ((i - 8) * 8));
+        } else {
+            b2 = b2 | (byte << ((i - 16) * 8));
+        }
+    }
+    // length in top byte of third word, with 0x80 marker (matches your small_str_len)
+    let len_byte = (n as u64) ^ 0x80;
+    b2 = (b2 & 0x00ffffffffffffff) | (len_byte << 56);
+    RocStr { bytes: b0, cap: b1, len: b2 }
+}
+
+fn gfx_init_err(msg: const u8[:]) -> HostGfxInitResult {
+    let s = rocstr_sso_from_msg(msg);
+    HostGfxInitResult {
+        p0: s.bytes,
+        p1: s.cap,
+        p2: s.len,
+        tag: 0, // Err
+        _pad0: 0, _pad1: 0, _pad2: 0, _pad3: 0, _pad4: 0, _pad5: 0, _pad6: 0,
+    }
+}
+
 fn impl_roc_gfx_init(title: RocStr, w: i32, h: i32) -> HostGfxInitResult {
+    print("host: gfx_init real 1");
     if gfx_open {
         return gfx_init_err("gfx already open");
     }
+
+    print("host: gfx_init real 2");
     let t = rocstr_to_bytes(title);
+
+    print("host: gfx_init real 3");
     if !gfx::open(t, w, h) {
+        // See the real reason without feeding Roc a bad Str
         var err: u8[>..] = gfx::error();
-        if err.len == 0 {
-            return gfx_init_err("gfx::open failed");
-        }
-        let s = gfx_growable_to_rocstr(copy(err));
-        return HostGfxInitResult {
-            p0: s.bytes, p1: s.cap, p2: s.len, tag: 0,
-            _pad0: 0, _pad1: 0, _pad2: 0, _pad3: 0, _pad4: 0, _pad5: 0, _pad6: 0,
-        };
+        print("host: gfx open failed:");
+        print(err);
+        // Short fixed SSO only — not gfx_growable_to_rocstr
+        return gfx_init_err("gfx open failed");
     }
+
+    print("host: gfx_init real 4");
     gfx_open = true;
     gfx_w = w;
     gfx_h = h;
     in_pass = false;
+    print("host: gfx_init real 5");
     gfx_init_ok(1)
 }
 

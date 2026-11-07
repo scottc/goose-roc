@@ -67,19 +67,16 @@ stage() {
   cp -f "$src" "$CACHE/$name"
   cp -f "$src" "$OUT/$name"
   echo "  $name"
-  return 0
 }
 
-echo "==> goose gfx"
+echo "==> goose gfx (.a)"
 RSP=$(goose --gfx-link cc)
 cp -f "$RSP" "$CACHE/link-cc.rsp"
 while read -r tok; do
   case "$tok" in
     *.a)
-      if [[ -f "$tok" ]]; then
-        bn=$(basename "$tok")
-        stage "$tok" "$bn" || true
-      fi
+      [[ -f "$tok" ]] || continue
+      stage "$tok" "$(basename "$tok")"
       ;;
   esac
 done < <(tr ' \t\n' '\n' < "$RSP" | sed '/^$/d')
@@ -92,54 +89,64 @@ stage "$CRT_DIR/crt1.o" crt1.o || { echo "error: crt1.o"; exit 1; }
 stage "$CRT_DIR/crti.o" crti.o || true
 stage "$CRT_DIR/crtn.o" crtn.o || true
 
-echo "==> glibc.static"
-STATIC_ROOT=""
-if [[ -f "$CACHE/glibc-static-root.txt" ]]; then
-  STATIC_ROOT=$(cat "$CACHE/glibc-static-root.txt")
-  [[ -d "$STATIC_ROOT" ]] || STATIC_ROOT=""
-fi
-if [[ -z "$STATIC_ROOT" ]]; then
-  STATIC_ROOT=$(nix-build --no-out-link -E 'with import <nixpkgs> {}; glibc.static' 2>/dev/null || true)
-  [[ -z "$STATIC_ROOT" ]] && STATIC_ROOT=$(nix-build --no-out-link '<nixpkgs>' -A glibc.static 2>/dev/null || true)
-  [[ -n "$STATIC_ROOT" ]] || { echo "error: glibc.static"; exit 1; }
-  echo "$STATIC_ROOT" > "$CACHE/glibc-static-root.txt"
-fi
-echo "  $STATIC_ROOT"
-STATIC_LIB="$STATIC_ROOT/lib"
-[[ -d "$STATIC_LIB" ]] || STATIC_LIB="$STATIC_ROOT"
-
-stage_static() {
-  local name="$1"
-  if [[ -f "$STATIC_LIB/$name" ]]; then
-    stage "$STATIC_LIB/$name" "$name"
-    return 0
-  fi
-  [[ -f "$STATIC_ROOT/lib64/$name" ]] && stage "$STATIC_ROOT/lib64/$name" "$name" && return 0
-  echo "WARN: no $name"
-  return 1
-}
-
-stage_static libc.a || { echo "error: libc.a required"; exit 1; }
-stage_static libm.a || { echo "error: libm.a required"; exit 1; }
-stage_static libpthread.a || true
-stage_static libdl.a || true
-stage_static librt.a || true
-stage_static libutil.a || true
-stage_static libresolv.a || true
-
-echo "==> libgcc"
+# libgcc static pieces still useful for some unresolved soft-float/EH from archives
 if [[ -n "${CC_DIR:-}" ]]; then
   stage "$CC_DIR/libgcc.a" libgcc.a || true
   stage "$CC_DIR/libgcc_eh.a" libgcc_eh.a || true
 fi
 
-# Never leave dynamic stubs in OUT for this static path
-rm -f "$OUT"/libc.so* "$OUT"/libm.so* "$OUT"/libzigc.a "$OUT"/libcompiler_rt.a 2>/dev/null || true
+echo "==> dynamic glibc (linker script + nonshared)"
+GLIBC_LIB="$CRT_DIR"
+LDSO="$GLIBC_LIB/ld-linux-x86-64.so.2"
+
+# libc_nonshared.a
+NONSHARED="$GLIBC_LIB/libc_nonshared.a"
+if [[ ! -f "$NONSHARED" ]]; then
+  NONSHARED=$(cc -print-file-name=libc_nonshared.a 2>/dev/null || true)
+fi
+[[ -f "$NONSHARED" ]] || { echo "error: no libc_nonshared.a"; exit 1; }
+cp -f "$NONSHARED" "$OUT/libc_nonshared.a"
+echo "  libc_nonshared.a"
+
+# sonames (symlinks into store are fine)
+ln -sfn "$GLIBC_LIB/libc.so.6"       "$OUT/libc.so.6"
+ln -sfn "$GLIBC_LIB/libm.so.6"       "$OUT/libm.so.6"
+ln -sfn "$GLIBC_LIB/libdl.so.2"      "$OUT/libdl.so.2"
+ln -sfn "$GLIBC_LIB/libpthread.so.0" "$OUT/libpthread.so.0"
+ln -sfn "$GLIBC_LIB/librt.so.1"      "$OUT/librt.so.1"
+ln -sfn "$GLIBC_LIB/libutil.so.1"    "$OUT/libutil.so.1" 2>/dev/null || true
+
+ln -sfn libm.so.6       "$OUT/libm.so"
+ln -sfn libdl.so.2      "$OUT/libdl.so"
+ln -sfn libpthread.so.0 "$OUT/libpthread.so"
+ln -sfn librt.so.1      "$OUT/librt.so"
+ln -sfn libutil.so.1    "$OUT/libutil.so" 2>/dev/null || true
+
+# CRITICAL: remove any symlink before writing a real file
+rm -f "$OUT/libc.so" "$CACHE/libc.so"
+# write a regular file (not a symlink)
+cat > "$OUT/libc.so" <<EOF
+/* roc x64glibc dynamic */
+GROUP ( $GLIBC_LIB/libc.so.6 $OUT/libc_nonshared.a AS_NEEDED ( $LDSO ) )
+EOF
+cp -f "$OUT/libc.so" "$CACHE/libc.so"
+
+file "$OUT/libc.so"   # must say "ASCII text" or "script", NOT "ELF" / "symbolic link"
+head -3 "$OUT/libc.so"
+
+STDCXX=$(cc -print-file-name=libstdc++.so.6 2>/dev/null || true)
+GCC_S=$(cc -print-file-name=libgcc_s.so.1 2>/dev/null || true)
+[[ -e "$STDCXX" ]] && ln -sfn "$STDCXX" "$OUT/libstdc++.so" && ln -sfn "$STDCXX" "$OUT/libstdc++.so.6"
+[[ -e "$GCC_S" ]] && ln -sfn "$GCC_S" "$OUT/libgcc_s.so" && ln -sfn "$GCC_S" "$OUT/libgcc_s.so.1"
+
+rm -f "$OUT"/libc.a "$OUT"/libm.a "$OUT"/libpthread.a "$OUT"/libdl.a \
+      "$OUT"/librt.a "$OUT"/libutil.a "$OUT"/libresolv.a 2>/dev/null || true
 
 echo "==> checks"
-test -f "$OUT/libc.a" && test -f "$OUT/libm.a" && test -f "$OUT/libgoose_gfx.a"
 test -f "$OUT/libhost.a"
-ls -la "$OUT"
+test -e "$OUT/libc.so" || test -e "$OUT/libc.so.6"
+test -f "$OUT/libgoose_gfx.a"
+ls -la "$OUT" | head -40
 nm "$OUT/libgoose_gfx.a" | grep ' T gs_gfx_open' | head -1
-nm "$OUT/libhost.a" | grep -E ' T (main|roc_gfx_init|roc_alloc)$' || true
-echo "host-glibc ok"
+echo "host-glibc (dynamic) ok"
+echo "note: platform inputs must list libc.so libm.so … not libc.a"

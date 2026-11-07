@@ -94,6 +94,8 @@ main! = |args| {
     )
         .map_err(|StdoutErr(e)| StdoutErr(e))?
 
+    Stdout.line!("before gfx_init").map_err(|StdoutErr(e)| StdoutErr(e))?
+
     win =
         Gfx.init!("goose-roc mini doom", 640, 400)
             .map_err(|GfxErr(e)| GfxErr(e))?
