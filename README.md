@@ -39,6 +39,9 @@ nix run github:lukewilliamboswell/roc-blueprint/0.11.0 -- shell
 ```
 
 Generate Glue & Build Goose Host:
+> [!IMPORTANT]
+> The v2026.3 goose release dynamically links SDL3 & glibc. So on NixOS you must use `nix-ld` or `steam-run`, to run the app, should you need to call any of those dependencies.
+> It's possible to build against `x64musl` for a statically linked executable, but then we also need to provide statically linked goose dependencies, and thus provide statically linked releases.
 ```sh
 ./scripts/build-host-goose-pure-glibc.sh
 ```
@@ -52,8 +55,6 @@ roc build app/main.roc
 
     main
 ```
-> [!IMPORTANT]
-> Depends on dynamically linked glibc, so on NixOS you must use `nix-ld` or `steam-run`, to run the app.
 
 Build & Run Mini Doom Port:
 ```sh
@@ -61,8 +62,7 @@ Build & Run Mini Doom Port:
 ```
 
 > [!IMPORTANT]
-> Depends on dynamically linked glibc, so on NixOS you must use `nix-ld` or `steam-run`, to run the app.
-> Under the hood we
+> Depends on dynamically linked glibc (SDL3), so on NixOS you must use `nix-ld` or `steam-run`, to run the app.
 
 Steam run:
 ```sh

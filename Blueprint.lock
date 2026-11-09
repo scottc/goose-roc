@@ -113,9 +113,9 @@
 						(name "locked")
 						(value (Attrs ((
 							(name "lastModified")
-							(value (Int 1793175322))) (
+							(value (Int 1794218721))) (
 							(name "narHash")
-							(value (Str "sha256-Fz8GTSXPqjFL/0bhOQtmeu9+7jSIIUAWMjIKJB6jULU="))) (
+							(value (Str "sha256-3IIkR8g4aGcK6nq+X9jj3fD6p/bdRu9DmdknHG+e7OU="))) (
 							(name "type")
 							(value (Str "path"))) (
 							(name "path")
@@ -125,15 +125,15 @@
 						(name "locked")
 						(value (Attrs ((
 							(name "lastModified")
-							(value (Int 1793726008))) (
+							(value (Int 1794042290))) (
 							(name "narHash")
-							(value (Str "sha256-jQp1wKvbwWdLBASTXkSi/VYmDJ5AbBi1WvcMt9HWJC8="))) (
+							(value (Str "sha256-ziZn2PvCJE5JEEpqTdxXwJpPB+L3YqoCpTAMCzyaP3U="))) (
 							(name "owner")
 							(value (Str "NixOS"))) (
 							(name "repo")
 							(value (Str "nixpkgs"))) (
 							(name "rev")
-							(value (Str "1d060086d60cb76a40cf37109f979d88a5bd6396"))) (
+							(value (Str "f4a03c008967841f2a0b3cb7c436fc6fc31671f6"))) (
 							(name "type")
 							(value (Str "github"))))))) (
 						(name "original")
@@ -151,25 +151,25 @@
 						(name "locked")
 						(value (Attrs ((
 							(name "lastModified")
-							(value (Int 1792773339))) (
+							(value (Int 1793876309))) (
 							(name "narHash")
-							(value (Str "sha256-rZLrzrC6i+jnTAlvPZHogKDulY7WWDEv9hJeHieO7Zw="))) (
+							(value (Str "sha256-Wojg9lIH/hDH91iDVH2/EPw8oDSpxjxhXONbU1yf4Zg="))) (
 							(name "owner")
 							(value (Str "NixOS"))) (
 							(name "repo")
 							(value (Str "nixpkgs"))) (
 							(name "rev")
-							(value (Str "3ec636362e1816bc2f0888fa0fa2c69f1bc9e504"))) (
+							(value (Str "f9a75f41be3a74eab55d3a7679d34ad6cc0da977"))) (
 							(name "type")
 							(value (Str "github"))))))) (
 						(name "original")
 						(value (Attrs ((
 							(name "owner")
 							(value (Str "NixOS"))) (
+							(name "ref")
+							(value (Str "nixos-unstable"))) (
 							(name "repo")
 							(value (Str "nixpkgs"))) (
-							(name "rev")
-							(value (Str "3ec636362e1816bc2f0888fa0fa2c69f1bc9e504"))) (
 							(name "type")
 							(value (Str "github"))))))))))) (
 					(name "root")
@@ -223,12 +223,12 @@
 				(ref "github:NixOS/nixpkgs/nixos-unstable")
 				(version 1))))))))
 	(sources ((
-		(digest "sha256:8d0a75c0abdbc1674b0404935e44a2fd56260c9e406c18b55af70cb7d1d6242f")
+		(digest "sha256:ce2667d8fbc2244e49104a6a4ddc57c09a4f07e2f762aa02a5300c0b3c9a3f75")
 		(name "nix")
 		(provider "nix")
 		(ref "github:NixOS/nixpkgs/nixos-unstable")
-		(rev "1d060086d60cb76a40cf37109f979d88a5bd6396")) (
-		(digest "sha256:0944aca701d8e845c99de8c559331e85d7133579ccd195fddd24fea26719e87b")
+		(rev "f4a03c008967841f2a0b3cb7c436fc6fc31671f6")) (
+		(digest "sha256:20744012d063c1ef72c9ec00143cd346065b0e4b787bbdf48c9b09ffa473feb9")
 		(name "goose")
 		(provider "nix")
 		(ref "path:flakes/goose")

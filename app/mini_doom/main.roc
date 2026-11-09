@@ -14,7 +14,7 @@ import Palette
 import Flats
 
 default_wad : Str
-default_wad = "assets/freedoom1-e1m1.wad"
+default_wad = "data/freedoom1-e1m1.wad"
 
 wad_path_from_args : List(Str) -> Str
 wad_path_from_args = |args| {
