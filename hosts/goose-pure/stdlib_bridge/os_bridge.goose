@@ -1,16 +1,16 @@
 // Same symbols as stdlib/os.goose (runtime_os.h)
-extern "gs_os_read_file" fn os_read_file(path: const u8[:], out: u8[>..]&) -> bool;
-extern "gs_os_write_file" fn os_write_file(path: const u8[:], data: const u8[:]) -> bool;
-extern "gs_os_append_file" fn os_append_file(path: const u8[:], data: const u8[:]) -> bool;
-extern "gs_os_file_exists" fn os_file_exists(path: const u8[:]) -> bool;
-extern "gs_os_remove_file" fn os_delete_file(path: const u8[:]) -> bool;
-extern "gs_os_make_dir" fn os_make_dir(path: const u8[:]) -> bool;
-extern "gs_os_remove_dir" fn os_delete_dir(path: const u8[:]) -> bool;
-extern "gs_os_list_dir" fn os_list_dir(path: const u8[:], out: u8[>..]&) -> bool;
-extern "gs_os_getenv" fn os_env(name: const u8[:], out: u8[>..]&) -> bool;
-extern "gs_os_time_ns" fn os_time_ns() -> i64;
-extern "gs_os_clock_ns" fn os_clock_ns() -> i64;
-extern "gs_os_sleep_ms" fn os_sleep_ms(ms: i64);
+extern fn os_read_file(path: const u8[:], out: u8[>..]&) -> bool = "gs_os_read_file";
+extern fn os_write_file(path: const u8[:], data: const u8[:]) -> bool = "gs_os_write_file";
+extern fn os_append_file(path: const u8[:], data: const u8[:]) -> bool = "gs_os_append_file";
+extern fn os_file_exists(path: const u8[:]) -> bool = "gs_os_file_exists";
+extern fn os_delete_file(path: const u8[:]) -> bool = "gs_os_remove_file";
+extern fn os_make_dir(path: const u8[:]) -> bool = "gs_os_make_dir";
+extern fn os_delete_dir(path: const u8[:]) -> bool = "gs_os_remove_dir";
+extern fn os_list_dir(path: const u8[:], out: u8[>..]&) -> bool = "gs_os_list_dir";
+extern fn os_env(name: const u8[:], out: u8[>..]&) -> bool = "gs_os_getenv";
+extern fn os_time_ns() -> i64 = "gs_os_time_ns";
+extern fn os_clock_ns() -> i64 = "gs_os_clock_ns";
+extern fn os_sleep_ms(ms: i64) = "gs_os_sleep_ms";
 
 struct TryParts {
     p0: u64,

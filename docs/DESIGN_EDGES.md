@@ -10,7 +10,7 @@
 1. **No Zig-style package import of glue into host** on Goose v2026.3  
    Composition = concat or multi-file single program.
 
-2. **Grow-only arena ⇒ roc_dealloc is a no-op**  
+2. **Grow-only bump allocation ⇒ roc_dealloc is a no-op**  
    Goose data stacks don’t free; Roc RC still runs; memory lives until process exit.
 
 3. **C polyfills on this pin**  
@@ -23,12 +23,12 @@
    Glue emits size64 comments; Goose cannot mirror Zig @sizeOf checks.
 
 6. **RC identity vs bump**  
-   Safe only while arena outlives roc_main and dealloc never reuses addresses incorrectly  
+   Safe only while bump allocation outlives roc_main and dealloc never reuses addresses incorrectly  
    (never-reuse bump is OK; a future free-list would not be).
 
 ## Glue is not responsible for
 - Printing / SSO decode
-- Arena policy
+- Bump policy
 - entry.c / crt / musl link
 
 ## Targets

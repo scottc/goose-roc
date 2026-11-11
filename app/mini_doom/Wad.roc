@@ -1,9 +1,16 @@
-## Pure WAD directory parse (Goose 31_mini_doom load_wad).
+## WAD loader that never materialises a full List(Lump).
+## Directory is scanned on demand – eliminates the recursive growable
+## that was blowing the Goose data stack.
 Wad := {}.
 {
-    Lump : { name : Str, start : U64, size : U64 }
+    ## Only the raw bytes + directory location. No big list of lumps.
+    Loaded : {
+        wad : List(U8),
+        dir_off : U64,
+        count : U64,
+    }
 
-    Loaded : { wad : List(U8), lumps : List(Lump) }
+    Lump : { name : Str, start : U64, size : U64 }
 
     u16le : List(U8), U64 -> Try(U64, [WadErr(Str)])
     u16le = |data, at| {
@@ -76,7 +83,6 @@ Wad := {}.
         name8_go(data, at, 0, [])
     }
 
-    ## I=73 W=87 A=65 D=68
     sig_iwad : U8, U8, U8, U8 -> Bool
     sig_iwad = |s0, s1, s2, s3| {
         if s0 == 73 {
@@ -94,7 +100,6 @@ Wad := {}.
         }
     }
 
-    ## P=80 W=87 A=65 D=68
     sig_pwad : U8, U8, U8, U8 -> Bool
     sig_pwad = |s0, s1, s2, s3| {
         if s0 == 80 {
@@ -112,50 +117,26 @@ Wad := {}.
         }
     }
 
-    copy_range : List(U8), U64, U64, U64, List(U8) -> Try(List(U8), [WadErr(Str)])
-    copy_range = |data, start, size, j, out| {
-        if j >= size {
-            Ok(out)
-        } else {
-            match List.get(data, start + j) {
-                Err(_) => Err(WadErr("lump range"))
-                Ok(b) => copy_range(data, start, size, j + 1, List.append(out, b))
-            }
-        }
-    }
-
-    read_entries :
-        List(U8),
-        U64,
-        U64,
-        U64,
-        List(Lump)
-        -> Try(List(Lump), [WadErr(Str)])
-    read_entries = |data, directory, count, i, lumps| {
+    ## Scan the directory on demand.
+    find_lump_go : List(U8), U64, U64, U64, Str -> Try(Lump, [WadErr(Str)])
+    find_lump_go = |wad, dir_off, count, i, name| {
         if i >= count {
-            Ok(lumps)
+            Err(WadErr("missing lump"))
         } else {
-            off = directory + i * 16
-            match u32le(data, off) {
+            off = dir_off + i * 16
+            match u32le(wad, off) {
                 Err(e) => Err(e)
                 Ok(start) => {
-                    match u32le(data, off + 4) {
+                    match u32le(wad, off + 4) {
                         Err(e) => Err(e)
                         Ok(size) => {
-                            match name8(data, off + 8) {
+                            match name8(wad, off + 8) {
                                 Err(e) => Err(e)
-                                Ok(name) => {
-                                    end = start + size
-                                    if end > List.len(data) {
-                                        Err(WadErr("lump past end of WAD"))
+                                Ok(n) => {
+                                    if n == name {
+                                        Ok({ name: n, start, size })
                                     } else {
-                                        read_entries(
-                                            data,
-                                            directory,
-                                            count,
-                                            i + 1,
-                                            List.append(lumps, { name, start, size }),
-                                        )
+                                        find_lump_go(wad, dir_off, count, i + 1, name)
                                     }
                                 }
                             }
@@ -166,23 +147,146 @@ Wad := {}.
         }
     }
 
-    load_directory : List(U8) -> Try(Loaded, [WadErr(Str)])
-    load_directory = |data| {
-        match u32le(data, 4) {
-            Err(e) => Err(e)
-            Ok(count) => {
-                match u32le(data, 8) {
-                    Err(e) => Err(e)
-                    Ok(directory) => {
-                        if count > 100000 {
-                            Err(WadErr("bad WAD directory count"))
+    find_lump : Loaded, Str -> Try(Lump, [WadErr(Str)])
+    find_lump = |loaded, name| {
+        find_lump_go(loaded.wad, loaded.dir_off, loaded.count, 0, name)
+    }
+
+    get_u8 : List(U8), U64 -> Try(U8, [WadErr(Str)])
+    get_u8 = |wad, at| {
+        match List.get(wad, at) {
+            Err(_) => Err(WadErr("oob"))
+            Ok(b) => Ok(b)
+        }
+    }
+
+    i16le_f32 : List(U8), U64 -> Try(F32, [WadErr(Str)])
+    i16le_f32 = |data, at| {
+        match List.get(data, at) {
+            Err(_) => Err(WadErr("truncated i16"))
+            Ok(lo) => {
+                match List.get(data, at + 1) {
+                    Err(_) => Err(WadErr("truncated i16"))
+                    Ok(hi) => {
+                        raw = lo.to_u64() + hi.to_u64() * 256
+                        if raw >= 32768 {
+                            neg = (65536 - raw).to_f32()
+                            Ok(0 - neg)
                         } else {
-                            match read_entries(data, directory, count, 0, []) {
-                                Err(e) => Err(e)
-                                Ok(lumps) => Ok({ wad: data, lumps })
-                            }
+                            Ok(raw.to_f32())
                         }
                     }
+                }
+            }
+        }
+    }
+
+    u16_at : List(U8), U64 -> Try(U64, [WadErr(Str)])
+    u16_at = |data, at| {
+        u16le(data, at)
+    }
+
+    u32_at : List(U8), U64 -> Try(U64, [WadErr(Str)])
+    u32_at = |data, at| {
+        u32le(data, at)
+    }
+
+    ## Materialise only small lumps
+    copy_chunk_size : U64
+    copy_chunk_size = 4096
+
+    max_materialize : U64
+    max_materialize = 2 * 1024 * 1024
+
+    copy_chunk : List(U8), U64, U64, U64, List(U8) -> Try(List(U8), [WadErr(Str)])
+    copy_chunk = |wad, at, n, j, out| {
+        if j >= n {
+            Ok(out)
+        } else {
+            match List.get(wad, at + j) {
+                Err(_) => Err(WadErr("lump range"))
+                Ok(b) => copy_chunk(wad, at, n, j + 1, List.append(out, b))
+            }
+        }
+    }
+
+    materialize_go : List(U8), U64, U64, U64, List(U8) -> Try(List(U8), [WadErr(Str)])
+    materialize_go = |wad, start, size, off, acc| {
+        if off >= size {
+            Ok(acc)
+        } else {
+            remain = size - off
+            take =
+                if remain > copy_chunk_size {
+                    copy_chunk_size
+                } else {
+                    remain
+                }
+            match copy_chunk(wad, start + off, take, 0, []) {
+                Err(e) => Err(e)
+                Ok(block) =>
+                    materialize_go(wad, start, size, off + take, List.concat(acc, block))
+            }
+        }
+    }
+
+    materialize_range : List(U8), U64, U64 -> Try(List(U8), [WadErr(Str)])
+    materialize_range = |wad, start, size| {
+        if size > max_materialize {
+            Err(WadErr("lump too large to materialize; use indexed reads"))
+        } else if start + size > List.len(wad) {
+            Err(WadErr("lump past end of WAD"))
+        } else {
+            materialize_go(wad, start, size, 0, [])
+        }
+    }
+
+    ## Public API
+    lump_bytes : Loaded, Str -> Try(List(U8), [WadErr(Str)])
+    lump_bytes = |loaded, name| {
+        match find_lump(loaded, name) {
+            Err(e) => Err(e)
+            Ok(lump) => materialize_range(loaded.wad, lump.start, lump.size)
+        }
+    }
+
+    lump_bytes_of : Loaded, Lump -> Try(List(U8), [WadErr(Str)])
+    lump_bytes_of = |loaded, lump| {
+        materialize_range(loaded.wad, lump.start, lump.size)
+    }
+
+    records : Loaded, Str, U64 -> Try(List(U8), [WadErr(Str)])
+    records = |loaded, name, size| {
+        match lump_bytes(loaded, name) {
+            Err(e) => Err(e)
+            Ok(data) => {
+                len = List.len(data)
+                if len == 0 {
+                    Err(WadErr("empty lump"))
+                } else if size == 0 {
+                    Err(WadErr("bad record size"))
+                } else if len % size != 0 {
+                    Err(WadErr("bad record size"))
+                } else {
+                    Ok(data)
+                }
+            }
+        }
+    }
+
+    records_info : Loaded, Str, U64 -> Try(Lump, [WadErr(Str)])
+    records_info = |loaded, name, rec_size| {
+        match find_lump(loaded, name) {
+            Err(e) => Err(e)
+            Ok(lump) => {
+                if lump.size == 0 {
+                    Err(WadErr("empty lump"))
+                } else if rec_size == 0 {
+                    Err(WadErr("bad record size"))
+                } else if lump.size % rec_size != 0 {
+                    Err(WadErr("bad record size"))
+                } else {
+                    Ok(lump)
                 }
             }
         }
@@ -223,95 +327,26 @@ Wad := {}.
         }
     }
 
-    # i16le : List(U8), U64 -> Try(I64, [WadErr(Str)])
-    # i16le = |data, at| {
-    #     match u16le(data, at) {
-    #         Err(e) => Err(e)
-    #         Ok(v) => {
-    #             if v >= 32768 {
-    #                 Ok(0 - (65536 - v).to_i64())
-    #             } else {
-    #                 Ok(v.to_i64())
-    #             }
-    #         }
-    #     }
-    # }
-
-    ## Signed 16-bit LE → F32 (map coords / angles). Avoids U64→I64.
-    i16le_f32 : List(U8), U64 -> Try(F32, [WadErr(Str)])
-    i16le_f32 = |data, at| {
-        match List.get(data, at) {
-            Err(_) => Err(WadErr("truncated i16"))
-            Ok(lo) => {
-                match List.get(data, at + 1) {
-                    Err(_) => Err(WadErr("truncated i16"))
-                    Ok(hi) => {
-                        # unsigned 0..65535
-                        raw = lo.to_u64() + hi.to_u64() * 256
-                        if raw >= 32768 {
-                            # negative: raw - 65536
-                            neg = (65536 - raw).to_f32()
-                            Ok(0 - neg)
+    load_directory : List(U8) -> Try(Loaded, [WadErr(Str)])
+    load_directory = |data| {
+        match u32le(data, 4) {
+            Err(e) => Err(e)
+            Ok(count) => {
+                match u32le(data, 8) {
+                    Err(e) => Err(e)
+                    Ok(directory) => {
+                        if count > 65536 {
+                            Err(WadErr("bad WAD directory count"))
+                        } else if directory + count * 16 > List.len(data) {
+                            Err(WadErr("directory past end of WAD"))
                         } else {
-                            Ok(raw.to_f32())
+                            Ok({
+                                wad: data,
+                                dir_off: directory,
+                                count: count,
+                            })
                         }
                     }
-                }
-            }
-        }
-    }
-
-    find_lump : List(Lump), Str -> Try(U64, [WadErr(Str)])
-    find_lump = |lumps, name| {
-        find_lump_go(lumps, name, 0, Err(WadErr("missing lump")))
-    }
-
-    find_lump_go : List(Lump), Str, U64, Try(U64, [WadErr(Str)]) -> Try(U64, [WadErr(Str)])
-    find_lump_go = |lumps, name, i, found| {
-        if i >= List.len(lumps) {
-            found
-        } else {
-            match List.get(lumps, i) {
-                Err(_) => Err(WadErr("bad index"))
-                Ok(lump) => {
-                    next =
-                        if lump.name == name {
-                            Ok(i)
-                        } else {
-                            found
-                        }
-                    find_lump_go(lumps, name, i + 1, next)
-                }
-            }
-        }
-    }
-
-    lump_bytes : List(U8), List(Lump), Str -> Try(List(U8), [WadErr(Str)])
-    lump_bytes = |wad, lumps, name| {
-        match find_lump(lumps, name) {
-            Err(e) => Err(e)
-            Ok(index) => {
-                match List.get(lumps, index) {
-                    Err(_) => Err(WadErr("bad lump index"))
-                    Ok(lump) => copy_range(wad, lump.start, lump.size, 0, [])
-                }
-            }
-        }
-    }
-
-    ## Require non-empty multiple of record size.
-    records : List(U8), List(Lump), Str, U64 -> Try(List(U8), [WadErr(Str)])
-    records = |wad, lumps, name, size| {
-        match lump_bytes(wad, lumps, name) {
-            Err(e) => Err(e)
-            Ok(data) => {
-                len = List.len(data)
-                if len == 0 {
-                    Err(WadErr("empty lump"))
-                } else if len % size != 0 {
-                    Err(WadErr("bad record size"))
-                } else {
-                    Ok(data)
                 }
             }
         }

@@ -21,13 +21,13 @@ fn lookup_size(p: u64) -> i64 {
     return -1;
 }
 
-extern "gs_ffi_bytes" fn ffi_bytes(p: u64, n: i64, out: u8[>..]&) -> bool;
-extern "gs_addr_of_u8" fn addr_of(p: u8&) -> u64;
-extern "gs_addr_of_u8_const" fn addr_of_const(p: const u8&) -> u64;
-extern "gs_memmove_u64" fn memmove_u64(dst: u64, src: u64, n: i64);
-extern "gs_f64_bits" fn f64_bits(x: f64) -> u64;
-extern "gs_f32_bits" fn f32_bits(x: f32) -> u64;
-extern "roc_alloc" fn host_roc_alloc(size: u64, alignment: u32) -> u64;
+extern fn ffi_bytes(p: u64, n: i64, out: u8[>..]&) -> bool = "gs_ffi_bytes";
+extern fn addr_of(p: u8&) -> u64 = "gs_addr_of_u8";
+extern fn addr_of_const(p: const u8&) -> u64 = "gs_addr_of_u8_const";
+extern fn memmove_u64(dst: u64, src: u64, n: i64) = "gs_memmove_u64";
+extern fn f64_bits(x: f64) -> u64 = "gs_f64_bits";
+extern fn f32_bits(x: f32) -> u64 = "gs_f32_bits";
+extern fn host_roc_alloc(size: u64, alignment: u32) -> u64 = "roc_alloc";
 
 fn align_up(n: i64, a: i64) -> i64 {
     ((n + a - 1) / a) * a

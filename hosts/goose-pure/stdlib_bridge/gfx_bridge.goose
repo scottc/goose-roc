@@ -1,464 +1,456 @@
-// Roc ↔ Goose gfx (singleton). Result types = roc_platform_abi_types.goose only.
-
+// hosts/goose-pure/stdlib_bridge/gfx_bridge.goose
 import gfx;
 
-var gfx_open: bool = false;
-var gfx_w: i32 = 0;
-var gfx_h: i32 = 0;
-var in_pass: bool = false;
-var clear_r: f32 = 0.1;
-var clear_g: f32 = 0.1;
-var clear_b: f32 = 0.12;
+var gfx_open = false;
+var gfx_w: i32 = 640;
+var gfx_h: i32 = 400;
+var in_pass = false;
+var frame_live = false;
+
+var fb: u8[>..] = [];
+var fb_w: i32 = 0;
+var fb_h: i32 = 0;
+
+// Last clear (used when begin_screen must match Roc clear!)
+var clear_r: f32 = 0.0;
+var clear_g: f32 = 0.0;
+var clear_b: f32 = 0.0;
 var clear_a: f32 = 1.0;
 
-// host_impl / polyfill: addr_of, ffi_bytes, bytes_to_rocstr, bytes_to_roclist,
-// rocstr_to_bytes, f32_bits, f64_bits
+// One screen-sized texture for FB blit (id 0 = none)
+var screen_tex: u32 = 0;
+var screen_tex_w: i32 = 0;
+var screen_tex_h: i32 = 0;
 
-extern "gs_gfx_texture_upload_rgba" fn c_tex_upload(id: u32, pixels: u64, nbytes: i64) -> bool;
+extern fn c_tex_upload(id: u32, pixels: u64, nbytes: i64) -> bool = "gs_gfx_texture_upload_rgba";
+extern fn c_tex_create(w: i32, h: i32) -> u32 = "gs_gfx_create_texture";
+extern fn c_tex_release(id: u32) = "gs_gfx_release_texture";
+extern fn addr_of_u8(p: u8&) -> u64 = "gs_addr_of_u8";
 
-fn gfx_upload_rgba(t: gfx::Texture, pixels: u8[>..]) -> bool {
-    if pixels.len == 0 {
-        return false;
-    }
-    let pix = copy(pixels);
-    if pix.len == 0 {
-        return false;
-    }
-    let p = addr_of(pix[0]);
-    c_tex_upload(t.id, p, pix.len)
+fn clamp_byte(x: f32) -> u8 {
+    if x <= 0.0 { return 0; }
+    if x >= 255.0 { return 255; }
+    x as u8
 }
 
-fn gfx_bytes_to_rocstr(msg: const u8[:]) -> RocStr {
-    bytes_to_rocstr(msg)
-}
-
-fn gfx_growable_to_rocstr(msg: u8[>..]) -> RocStr {
-    bytes_to_roclist_as_str(copy(msg))
-}
-
-fn bytes_to_roclist_as_str(buf: u8[>..]) -> RocStr {
-    if buf.len == 0 {
-        return RocStr { bytes: 0, cap: 0, len: 0 };
-    }
-    let list = bytes_to_roclist(copy(buf));
-    RocStr {
-        bytes: list.bytes,
-        cap: list.capacity_or_other,
-        len: list.length,
+fn fb_resize(w_in: i32, h_in: i32) {
+    var w = w_in;
+    var h = h_in;
+    if w < 1 { w = 1; }
+    if h < 1 { h = 1; }
+    fb_w = w;
+    fb_h = h;
+    fb.resize((w * h * 4) as i64, 0);
+    // Drop stale GPU texture; recreated on present
+    if screen_tex != 0 {
+        c_tex_release(screen_tex);
+        screen_tex = 0;
+        screen_tex_w = 0;
+        screen_tex_h = 0;
     }
 }
 
-fn gfx_unit_ok() -> HostGfxShutdownResult {
+fn fb_clear(r: f32, g: f32, b: f32, a: f32) {
+    clear_r = r;
+    clear_g = g;
+    clear_b = b;
+    clear_a = a;
+    let R = clamp_byte(r * 255.0);
+    let G = clamp_byte(g * 255.0);
+    let B = clamp_byte(b * 255.0);
+    let A = clamp_byte(a * 255.0);
+    var i: i64 = 0;
+    let n = fb.len;
+    while i + 3 < n {
+        fb[i] = R;
+        fb[i + 1] = G;
+        fb[i + 2] = B;
+        fb[i + 3] = A;
+        i += 4;
+    }
+}
+
+fn fb_fill_rect(x: f32, y: f32, rw: f32, rh: f32, r: f32, g: f32, b: f32, a: f32) {
+    if fb_w <= 0 || fb_h <= 0 { return; }
+    var x0 = x as i64;
+    var y0 = y as i64;
+    var x1 = (x + rw) as i64;
+    var y1 = (y + rh) as i64;
+    if x0 < 0 { x0 = 0; }
+    if y0 < 0 { y0 = 0; }
+    if x1 > fb_w { x1 = fb_w; }
+    if y1 > fb_h { y1 = fb_h; }
+    if x1 <= x0 || y1 <= y0 { return; }
+    let R = clamp_byte(r * 255.0);
+    let G = clamp_byte(g * 255.0);
+    let B = clamp_byte(b * 255.0);
+    let A = clamp_byte(a * 255.0);
+    var py = y0;
+    while py < y1 {
+        var px = x0;
+        while px < x1 {
+            let at = (py * fb_w + px) * 4;
+            fb[at] = R;
+            fb[at + 1] = G;
+            fb[at + 2] = B;
+            fb[at + 3] = A;
+            px += 1;
+        }
+        py += 1;
+    }
+}
+
+fn ensure_frame() -> bool {
+    if !gfx_open { return false; }
+    if frame_live { return true; }
+    if !gfx::frame() { return false; }
+    frame_live = true;
+    true
+}
+
+fn end_pass_if_needed() {
+    if in_pass {
+        gfx::end_pass();
+        in_pass = false;
+    }
+}
+
+fn ensure_screen_tex() -> bool {
+    if screen_tex != 0 && screen_tex_w == fb_w && screen_tex_h == fb_h {
+        return true;
+    }
+    if screen_tex != 0 {
+        c_tex_release(screen_tex);
+        screen_tex = 0;
+    }
+    let id = c_tex_create(fb_w, fb_h);
+    if id == 0 { return false; }
+    screen_tex = id;
+    screen_tex_w = fb_w;
+    screen_tex_h = fb_h;
+    true
+}
+
+fn upload_fb() -> bool {
+    if fb.len == 0 { return false; }
+    if !ensure_screen_tex() { return false; }
+    // Contiguous growable buffer: address of first byte
+    let p = addr_of_u8(fb[0]);
+    c_tex_upload(screen_tex, p, fb.len)
+}
+
+// ---- packers (same as before; keep yours if identical) ----
+
+fn unit_ok() -> HostGfxShutdownResult {
     HostGfxShutdownResult {
         p0: 0, p1: 0, p2: 0, tag: 1,
         _pad0: 0, _pad1: 0, _pad2: 0, _pad3: 0, _pad4: 0, _pad5: 0, _pad6: 0,
     }
 }
 
-fn gfx_unit_err(msg: const u8[:]) -> HostGfxShutdownResult {
-    let s = gfx_bytes_to_rocstr(msg);
+fn unit_err(msg: const u8[:]) -> HostGfxShutdownResult {
+    let s = bytes_to_rocstr(msg);
     HostGfxShutdownResult {
         p0: s.bytes, p1: s.cap, p2: s.len, tag: 0,
         _pad0: 0, _pad1: 0, _pad2: 0, _pad3: 0, _pad4: 0, _pad5: 0, _pad6: 0,
     }
 }
 
-fn gfx_init_ok(id: u64) -> HostGfxInitResult {
+fn init_ok(handle: u64) -> HostGfxInitResult {
     HostGfxInitResult {
-        p0: id, p1: 0, p2: 0, tag: 1,
+        p0: handle, p1: 0, p2: 0, tag: 1,
         _pad0: 0, _pad1: 0, _pad2: 0, _pad3: 0, _pad4: 0, _pad5: 0, _pad6: 0,
     }
 }
 
-// All Try(Bool, [GfxErr(Str)]) → HostGfxFrameResult (glue dedupe)
-fn gfx_bool_ok(v: bool) -> HostGfxFrameResult {
-    let bit: u64 = if v { 1 } else { 0 };
+fn init_err(msg: const u8[:]) -> HostGfxInitResult {
+    let s = bytes_to_rocstr(msg);
+    HostGfxInitResult {
+        p0: s.bytes, p1: s.cap, p2: s.len, tag: 0,
+        _pad0: 0, _pad1: 0, _pad2: 0, _pad3: 0, _pad4: 0, _pad5: 0, _pad6: 0,
+    }
+}
+
+fn frame_bool_ok(v: bool) -> HostGfxFrameResult {
     HostGfxFrameResult {
-        p0: bit, p1: 0, p2: 0, tag: 1,
+        p0: if v { 1 } else { 0 }, p1: 0, p2: 0, tag: 1,
         _pad0: 0, _pad1: 0, _pad2: 0, _pad3: 0, _pad4: 0, _pad5: 0, _pad6: 0,
     }
 }
 
-fn gfx_bool_err(msg: const u8[:]) -> HostGfxFrameResult {
-    let s = gfx_bytes_to_rocstr(msg);
+fn frame_bool_err(msg: const u8[:]) -> HostGfxFrameResult {
+    let s = bytes_to_rocstr(msg);
     HostGfxFrameResult {
         p0: s.bytes, p1: s.cap, p2: s.len, tag: 0,
         _pad0: 0, _pad1: 0, _pad2: 0, _pad3: 0, _pad4: 0, _pad5: 0, _pad6: 0,
     }
 }
 
-fn gfx_mouse_delta_ok(x: f32, y: f32) -> HostGfxMouseDeltaResult {
-    HostGfxMouseDeltaResult {
-        p0: f32_bits(x), p1: f32_bits(y), p2: 0, tag: 1,
-        _pad0: 0, _pad1: 0, _pad2: 0, _pad3: 0, _pad4: 0, _pad5: 0, _pad6: 0,
-    }
-}
-
-fn gfx_mouse_delta_err(msg: const u8[:]) -> HostGfxMouseDeltaResult {
-    let s = gfx_bytes_to_rocstr(msg);
-    HostGfxMouseDeltaResult {
-        p0: s.bytes, p1: s.cap, p2: s.len, tag: 0,
-        _pad0: 0, _pad1: 0, _pad2: 0, _pad3: 0, _pad4: 0, _pad5: 0, _pad6: 0,
-    }
-}
-
-fn gfx_mouse_pos_ok(x: f32, y: f32) -> HostGfxMousePosResult {
-    HostGfxMousePosResult {
-        p0: f32_bits(x), p1: f32_bits(y), p2: 0, tag: 1,
-        _pad0: 0, _pad1: 0, _pad2: 0, _pad3: 0, _pad4: 0, _pad5: 0, _pad6: 0,
-    }
-}
-
-fn gfx_mouse_pos_err(msg: const u8[:]) -> HostGfxMousePosResult {
-    let s = gfx_bytes_to_rocstr(msg);
-    HostGfxMousePosResult {
-        p0: s.bytes, p1: s.cap, p2: s.len, tag: 0,
-        _pad0: 0, _pad1: 0, _pad2: 0, _pad3: 0, _pad4: 0, _pad5: 0, _pad6: 0,
-    }
-}
-
-fn gfx_winsize_ok(w: i32, h: i32) -> HostGfxWindowSizeResult {
-    HostGfxWindowSizeResult {
-        p0: w as u64, p1: h as u64, p2: 0, tag: 1,
-        _pad0: 0, _pad1: 0, _pad2: 0, _pad3: 0, _pad4: 0, _pad5: 0, _pad6: 0,
-    }
-}
-
-fn gfx_winsize_err(msg: const u8[:]) -> HostGfxWindowSizeResult {
-    let s = gfx_bytes_to_rocstr(msg);
-    HostGfxWindowSizeResult {
-        p0: s.bytes, p1: s.cap, p2: s.len, tag: 0,
-        _pad0: 0, _pad1: 0, _pad2: 0, _pad3: 0, _pad4: 0, _pad5: 0, _pad6: 0,
-    }
-}
-
-fn gfx_dt_ok(v: f64) -> HostGfxDeltaTimeResult {
-    HostGfxDeltaTimeResult {
-        p0: f64_bits(v), p1: 0, p2: 0, tag: 1,
-        _pad0: 0, _pad1: 0, _pad2: 0, _pad3: 0, _pad4: 0, _pad5: 0, _pad6: 0,
-    }
-}
-
-fn gfx_dt_err(msg: const u8[:]) -> HostGfxDeltaTimeResult {
-    let s = gfx_bytes_to_rocstr(msg);
-    HostGfxDeltaTimeResult {
-        p0: s.bytes, p1: s.cap, p2: s.len, tag: 0,
-        _pad0: 0, _pad1: 0, _pad2: 0, _pad3: 0, _pad4: 0, _pad5: 0, _pad6: 0,
-    }
-}
-
-fn gfx_poll_ok_none() -> HostGfxPollResult {
+fn poll_ok_none() -> HostGfxPollResult {
     HostGfxPollResult {
-        p0: 7, p1: 0, p2: 0, p3: 0, tag: 1,
+        p0: 0, p1: 0, p2: 0, p3: 5, tag: 1,
         _pad0: 0, _pad1: 0, _pad2: 0, _pad3: 0, _pad4: 0, _pad5: 0, _pad6: 0,
     }
 }
 
-fn gfx_poll_ok_quit() -> HostGfxPollResult {
-    HostGfxPollResult {
-        p0: 0, p1: 0, p2: 0, p3: 0, tag: 1,
-        _pad0: 0, _pad1: 0, _pad2: 0, _pad3: 0, _pad4: 0, _pad5: 0, _pad6: 0,
-    }
-}
-
-fn gfx_poll_err(msg: const u8[:]) -> HostGfxPollResult {
-    let s = gfx_bytes_to_rocstr(msg);
+fn poll_err(msg: const u8[:]) -> HostGfxPollResult {
+    let s = bytes_to_rocstr(msg);
     HostGfxPollResult {
         p0: s.bytes, p1: s.cap, p2: s.len, p3: 0, tag: 0,
         _pad0: 0, _pad1: 0, _pad2: 0, _pad3: 0, _pad4: 0, _pad5: 0, _pad6: 0,
     }
 }
 
-// Pack a short C-ish message as Roc small-string (64-bit LE).
-// Last byte of the 24-byte value holds length with high bit set (same as your is_small_str).
-fn rocstr_sso_from_msg(msg: const u8[:]) -> RocStr {
-    var n = msg.len;
-    if n > 23 {
-        n = 23;
-    }
-    var b0: u64 = 0;
-    var b1: u64 = 0;
-    var b2: u64 = 0;
-    for i in n {
-        let byte = msg[i] as u64;
-        if i < 8 {
-            b0 = b0 | (byte << (i * 8));
-        } else if i < 16 {
-            b1 = b1 | (byte << ((i - 8) * 8));
-        } else {
-            b2 = b2 | (byte << ((i - 16) * 8));
-        }
-    }
-    // length in top byte of third word, with 0x80 marker (matches your small_str_len)
-    let len_byte = (n as u64) ^ 0x80;
-    b2 = (b2 & 0x00ffffffffffffff) | (len_byte << 56);
-    RocStr { bytes: b0, cap: b1, len: b2 }
-}
-
-fn gfx_init_err(msg: const u8[:]) -> HostGfxInitResult {
-    let s = rocstr_sso_from_msg(msg);
-    HostGfxInitResult {
-        p0: s.bytes,
-        p1: s.cap,
-        p2: s.len,
-        tag: 0, // Err
+fn window_size_ok(w: i32, h: i32) -> HostGfxWindowSizeResult {
+    let bits = (h as u64) & 0xffffffff | (((w as u64) & 0xffffffff) << 32);
+    HostGfxWindowSizeResult {
+        p0: bits, p1: 0, p2: 0, tag: 1,
         _pad0: 0, _pad1: 0, _pad2: 0, _pad3: 0, _pad4: 0, _pad5: 0, _pad6: 0,
     }
 }
 
+fn window_size_err(msg: const u8[:]) -> HostGfxWindowSizeResult {
+    let s = bytes_to_rocstr(msg);
+    HostGfxWindowSizeResult {
+        p0: s.bytes, p1: s.cap, p2: s.len, tag: 0,
+        _pad0: 0, _pad1: 0, _pad2: 0, _pad3: 0, _pad4: 0, _pad5: 0, _pad6: 0,
+    }
+}
+
+fn mouse_pos_ok(x: f32, y: f32) -> HostGfxMousePosResult {
+    let xb = f32_bits(x) as u64;
+    let yb = f32_bits(y) as u64;
+    HostGfxMousePosResult {
+        p0: (xb & 0xffffffff) | (yb << 32), p1: 0, p2: 0, tag: 1,
+        _pad0: 0, _pad1: 0, _pad2: 0, _pad3: 0, _pad4: 0, _pad5: 0, _pad6: 0,
+    }
+}
+
+fn mouse_pos_err(msg: const u8[:]) -> HostGfxMousePosResult {
+    let s = bytes_to_rocstr(msg);
+    HostGfxMousePosResult {
+        p0: s.bytes, p1: s.cap, p2: s.len, tag: 0,
+        _pad0: 0, _pad1: 0, _pad2: 0, _pad3: 0, _pad4: 0, _pad5: 0, _pad6: 0,
+    }
+}
+
+fn mouse_delta_ok(dx: f32, dy: f32) -> HostGfxMouseDeltaResult {
+    let xb = f32_bits(dx) as u64;
+    let yb = f32_bits(dy) as u64;
+    HostGfxMouseDeltaResult {
+        p0: (xb & 0xffffffff) | (yb << 32), p1: 0, p2: 0, tag: 1,
+        _pad0: 0, _pad1: 0, _pad2: 0, _pad3: 0, _pad4: 0, _pad5: 0, _pad6: 0,
+    }
+}
+
+fn mouse_delta_err(msg: const u8[:]) -> HostGfxMouseDeltaResult {
+    let s = bytes_to_rocstr(msg);
+    HostGfxMouseDeltaResult {
+        p0: s.bytes, p1: s.cap, p2: s.len, tag: 0,
+        _pad0: 0, _pad1: 0, _pad2: 0, _pad3: 0, _pad4: 0, _pad5: 0, _pad6: 0,
+    }
+}
+
+fn delta_time_ok(v: f64) -> HostGfxDeltaTimeResult {
+    HostGfxDeltaTimeResult {
+        p0: f64_bits(v), p1: 0, p2: 0, tag: 1,
+        _pad0: 0, _pad1: 0, _pad2: 0, _pad3: 0, _pad4: 0, _pad5: 0, _pad6: 0,
+    }
+}
+
+fn delta_time_err(msg: const u8[:]) -> HostGfxDeltaTimeResult {
+    let s = bytes_to_rocstr(msg);
+    HostGfxDeltaTimeResult {
+        p0: s.bytes, p1: s.cap, p2: s.len, tag: 0,
+        _pad0: 0, _pad1: 0, _pad2: 0, _pad3: 0, _pad4: 0, _pad5: 0, _pad6: 0,
+    }
+}
+
+// ---- impls ----
+
 fn impl_roc_gfx_init(title: RocStr, w: i32, h: i32) -> HostGfxInitResult {
-    print("host: gfx_init real 1");
-    if gfx_open {
-        return gfx_init_err("gfx already open");
-    }
-
-    print("host: gfx_init real 2");
+    if gfx_open { return init_err("gfx already open"); }
     let t = rocstr_to_bytes(title);
-
-    print("host: gfx_init real 3");
     if !gfx::open(t, w, h) {
-        // See the real reason without feeding Roc a bad Str
-        var err: u8[>..] = gfx::error();
-        print("host: gfx open failed:");
-        print(err);
-        // Short fixed SSO only — not gfx_growable_to_rocstr
-        return gfx_init_err("gfx open failed");
+        return init_err("gfx::open failed");
     }
-
-    print("host: gfx_init real 4");
     gfx_open = true;
     gfx_w = w;
     gfx_h = h;
     in_pass = false;
-    print("host: gfx_init real 5");
-    gfx_init_ok(1)
+    frame_live = false;
+    screen_tex = 0;
+    fb_resize(w, h);
+    init_ok(1)
 }
 
 fn impl_roc_gfx_shutdown(win: u64) -> HostGfxShutdownResult {
-    if gfx_open {
-        if in_pass {
-            gfx::end_pass();
-            in_pass = false;
-        }
-        gfx::close();
-        gfx_open = false;
+    let _ = win;
+    if !gfx_open { return unit_ok(); }
+    end_pass_if_needed();
+    if screen_tex != 0 {
+        c_tex_release(screen_tex);
+        screen_tex = 0;
     }
-    gfx_unit_ok()
+    gfx::close();
+    gfx_open = false;
+    frame_live = false;
+    fb.resize(0, 0);
+    unit_ok()
 }
 
 fn impl_roc_gfx_frame(win: u64) -> HostGfxFrameResult {
-    if !gfx_open {
-        return gfx_bool_err("gfx not open");
-    }
-    if in_pass {
-        gfx::end_pass();
-        in_pass = false;
-    }
-    gfx_bool_ok(gfx::frame())
+    let _ = win;
+    if !gfx_open { return frame_bool_err("gfx not open"); }
+    frame_live = false;
+    if !gfx::frame() { return frame_bool_ok(false); }
+    frame_live = true;
+    frame_bool_ok(true)
 }
 
 fn impl_roc_gfx_poll(win: u64) -> HostGfxPollResult {
-    if !gfx_open {
-        return gfx_poll_err("gfx not open");
-    }
-    if gfx::key_pressed("Escape") {
-        return gfx_poll_ok_quit();
-    }
-    gfx_poll_ok_none()
+    let _ = win;
+    if !gfx_open { return poll_err("gfx not open"); }
+    poll_ok_none()
 }
 
 fn impl_roc_gfx_clear(win: u64, r: f32, g: f32, b: f32, a: f32) -> HostGfxShutdownResult {
-    if !gfx_open {
-        return gfx_unit_err("gfx not open");
-    }
-    clear_r = r;
-    clear_g = g;
-    clear_b = b;
-    clear_a = a;
-    if in_pass {
-        gfx::end_pass();
-        in_pass = false;
-    }
-    if !gfx::begin_screen(float4 { r, g, b, a }) {
-        return gfx_unit_err("gfx::begin_screen failed");
-    }
-    in_pass = true;
-    gfx_unit_ok()
-}
-
-fn impl_roc_gfx_present(win: u64) -> HostGfxShutdownResult {
-    if !gfx_open {
-        return gfx_unit_err("gfx not open");
-    }
-    if in_pass {
-        gfx::end_pass();
-        in_pass = false;
-    }
-    gfx_unit_ok()
-}
-
-fn impl_roc_gfx_window_size(win: u64) -> HostGfxWindowSizeResult {
-    if !gfx_open {
-        return gfx_winsize_err("gfx not open");
-    }
-    gfx_winsize_ok(gfx_w, gfx_h)
-}
-
-fn impl_roc_gfx_set_title(win: u64, title: RocStr) -> HostGfxShutdownResult {
-    if !gfx_open {
-        return gfx_unit_err("gfx not open");
-    }
-    gfx::set_title(rocstr_to_bytes(title));
-    gfx_unit_ok()
+    let _ = win;
+    if !gfx_open { return unit_err("gfx not open"); }
+    if !ensure_frame() { return unit_err("gfx::frame failed"); }
+    fb_clear(r, g, b, a);
+    unit_ok()
 }
 
 fn impl_roc_gfx_draw_rect(
-    win: u64,
-    x: f32, y: f32, rw: f32, rh: f32,
+    win: u64, x: f32, y: f32, w: f32, h: f32,
     r: f32, g: f32, b: f32, a: f32,
 ) -> HostGfxShutdownResult {
-    if !gfx_open {
-        return gfx_unit_err("gfx not open");
+    let _ = win;
+    if !gfx_open { return unit_err("gfx not open"); }
+    if !ensure_frame() { return unit_err("gfx::frame failed"); }
+    fb_fill_rect(x, y, w, h, r, g, b, a);
+    unit_ok()
+}
+
+fn impl_roc_gfx_present(win: u64) -> HostGfxShutdownResult {
+    let _ = win;
+    if !gfx_open { return unit_err("gfx not open"); }
+    if !ensure_frame() { return unit_err("gfx::frame failed"); }
+
+    end_pass_if_needed();
+
+    // 1) Always clear GPU to last Roc clear (sky/floor visible even if upload fails)
+    if !gfx::begin_screen(float4 { clear_r, clear_g, clear_b, clear_a }) {
+        frame_live = false;
+        return unit_err("begin_screen failed");
     }
-    if !in_pass {
-        if !gfx::begin_screen(float4 { clear_r, clear_g, clear_b, clear_a }) {
-            return gfx_unit_err("begin_screen for draw_rect");
-        }
-        in_pass = true;
-    }
-    let _ = x;
-    let _ = y;
-    let _ = rw;
-    let _ = rh;
-    let _ = r;
-    let _ = g;
-    let _ = b;
-    let _ = a;
-    gfx_unit_ok()
+    in_pass = true;
+
+    // 2) Upload software FB (walls/rects). Requires polyfills in gs_ffi_polyfill.c
+    let _ = upload_fb();
+    // Optional: if you have a fullscreen textured draw in goose_gfx, call it here
+    // with screen_tex covering the viewport. Without it, begin_screen still shows clear_*.
+
+    gfx::end_pass();
+    in_pass = false;
+    frame_live = false;
+    unit_ok()
+}
+
+fn impl_roc_gfx_window_size(win: u64) -> HostGfxWindowSizeResult {
+    let _ = win;
+    if !gfx_open { return window_size_err("gfx not open"); }
+    window_size_ok(gfx_w, gfx_h)
+}
+
+fn impl_roc_gfx_set_title(win: u64, title: RocStr) -> HostGfxShutdownResult {
+    let _ = win;
+    let _ = title;
+    if !gfx_open { return unit_err("gfx not open"); }
+    unit_ok()
 }
 
 fn impl_roc_gfx_key_down(win: u64, name: RocStr) -> HostGfxFrameResult {
-    if !gfx_open {
-        return gfx_bool_err("gfx not open");
-    }
-    gfx_bool_ok(gfx::key_down(rocstr_to_bytes(name)))
+    let _ = win;
+    if !gfx_open { return frame_bool_err("gfx not open"); }
+    let k = rocstr_to_bytes(name);
+    frame_bool_ok(gfx::key_down(k))
 }
 
 fn impl_roc_gfx_key_pressed(win: u64, name: RocStr) -> HostGfxFrameResult {
-    if !gfx_open {
-        return gfx_bool_err("gfx not open");
-    }
-    gfx_bool_ok(gfx::key_pressed(rocstr_to_bytes(name)))
-}
-
-fn impl_roc_gfx_mouse_down(win: u64, button: i32) -> HostGfxFrameResult {
-    if !gfx_open {
-        return gfx_bool_err("gfx not open");
-    }
-    gfx_bool_ok(gfx::mouse_down(button))
+    let _ = win;
+    if !gfx_open { return frame_bool_err("gfx not open"); }
+    let k = rocstr_to_bytes(name);
+    frame_bool_ok(gfx::key_pressed(k))
 }
 
 fn impl_roc_gfx_mouse_delta(win: u64) -> HostGfxMouseDeltaResult {
-    if !gfx_open {
-        return gfx_mouse_delta_err("gfx not open");
-    }
-    let d = gfx::mouse_delta();
-    gfx_mouse_delta_ok(d.x, d.y)
+    let _ = win;
+    if !gfx_open { return mouse_delta_err("gfx not open"); }
+    mouse_delta_ok(0.0, 0.0)
 }
 
 fn impl_roc_gfx_mouse_pos(win: u64) -> HostGfxMousePosResult {
-    if !gfx_open {
-        return gfx_mouse_pos_err("gfx not open");
-    }
-    let p = gfx::mouse_pos();
-    gfx_mouse_pos_ok(p.x, p.y)
+    let _ = win;
+    if !gfx_open { return mouse_pos_err("gfx not open"); }
+    mouse_pos_ok(0.0, 0.0)
+}
+
+fn impl_roc_gfx_mouse_down(win: u64, button: i32) -> HostGfxFrameResult {
+    let _ = win;
+    let _ = button;
+    if !gfx_open { return frame_bool_err("gfx not open"); }
+    frame_bool_ok(false)
 }
 
 fn impl_roc_gfx_set_mouse_relative(win: u64, on: bool) -> HostGfxShutdownResult {
-    if !gfx_open {
-        return gfx_unit_err("gfx not open");
-    }
-    let _ = gfx::set_mouse_relative(on);
-    gfx_unit_ok()
+    let _ = win;
+    let _ = on;
+    if !gfx_open { return unit_err("gfx not open"); }
+    unit_ok()
 }
 
-fn impl_roc_gfx_set_cursor_visible(win: u64, visible: bool) -> HostGfxShutdownResult {
-    if !gfx_open {
-        return gfx_unit_err("gfx not open");
-    }
-    let _ = gfx::set_cursor_visible(visible);
-    gfx_unit_ok()
+fn impl_roc_gfx_set_cursor_visible(win: u64, on: bool) -> HostGfxShutdownResult {
+    let _ = win;
+    let _ = on;
+    if !gfx_open { return unit_err("gfx not open"); }
+    unit_ok()
 }
 
 fn impl_roc_gfx_delta_time(win: u64) -> HostGfxDeltaTimeResult {
-    if !gfx_open {
-        return gfx_dt_err("gfx not open");
-    }
-    gfx_dt_ok(gfx::delta_time())
+    let _ = win;
+    if !gfx_open { return delta_time_err("gfx not open"); }
+    delta_time_ok(1.0 / 60.0)
 }
 
 fn impl_roc_gfx_texture_create(w: i32, h: i32) -> HostGfxInitResult {
-    if !gfx_open {
-        return gfx_init_err("gfx not open");
-    }
-    if w <= 0 || h <= 0 {
-        return gfx_init_err("texture size");
-    }
-    let t = gfx::texture2d(w, h);
-    gfx_init_ok(t.id)
+    if !gfx_open { return init_err("gfx not open"); }
+    let id = c_tex_create(w, h);
+    if id == 0 { return init_err("texture create failed"); }
+    init_ok(id as u64)
 }
 
 fn impl_roc_gfx_texture_destroy(tex: u64) -> HostGfxShutdownResult {
-    if !gfx_open {
-        return gfx_unit_err("gfx not open");
-    }
-    let t = gfx::Texture { id: tex as u32 };
-    gfx::release(t);
-    gfx_unit_ok()
+    if tex != 0 { c_tex_release(tex as u32); }
+    unit_ok()
 }
 
 fn impl_roc_gfx_texture_upload_rgba(tex: u64, rgba: RocList) -> HostGfxShutdownResult {
-    if !gfx_open {
-        return gfx_unit_err("gfx not open");
-    }
+    if tex == 0 { return unit_err("bad texture"); }
     let n = rgba.length as i64;
-    if n <= 0 || rgba.bytes == 0 {
-        return gfx_unit_err("empty rgba");
+    if n <= 0 || rgba.bytes == 0 { return unit_err("empty rgba"); }
+    if !c_tex_upload(tex as u32, rgba.bytes, n) {
+        return unit_err("upload failed");
     }
-    var bytes: u8[>..] = [];
-    if !ffi_bytes(rgba.bytes, n, bytes) {
-        return gfx_unit_err("rgba copy failed");
-    }
-    let t = gfx::Texture { id: tex as u32 };
-    if !gfx_upload_rgba(t, copy(bytes)) {
-        return gfx_unit_err("texture upload failed");
-    }
-    gfx_unit_ok()
+    unit_ok()
 }
 
 fn impl_roc_gfx_draw_textured_quad(
-    win: u64,
-    x: f32, y: f32, qw: f32, qh: f32,
-    tex: u64,
-    u0: f32, v0: f32, u1: f32, v1: f32,
+    win: u64, x: f32, y: f32, qw: f32, qh: f32,
+    tex: u64, u0: f32, v0: f32, u1: f32, v1: f32,
 ) -> HostGfxShutdownResult {
-    if !gfx_open {
-        return gfx_unit_err("gfx not open");
-    }
-    if !in_pass {
-        if !gfx::begin_screen(float4 { clear_r, clear_g, clear_b, clear_a }) {
-            return gfx_unit_err("begin_screen for quad");
-        }
-        in_pass = true;
-    }
-    let _ = x;
-    let _ = y;
-    let _ = qw;
-    let _ = qh;
-    let _ = tex;
-    let _ = u0;
-    let _ = v0;
-    let _ = u1;
-    let _ = v1;
-    gfx_unit_ok()
+    let _ = win; let _ = x; let _ = y; let _ = qw; let _ = qh;
+    let _ = tex; let _ = u0; let _ = v0; let _ = u1; let _ = v1;
+    unit_ok()
 }

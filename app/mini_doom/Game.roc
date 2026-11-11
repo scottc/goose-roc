@@ -32,17 +32,21 @@ Game := {}.
         actors: [],
     }
 
+    ## Public entry point used by main
     load_from_things : List(U8) -> Try(Model, [WadErr(Str)])
     load_from_things = |things| {
         load_things_go(things, 0, init_empty)
     }
 
-    ## Back-compat name used by main
+    ## Back-compat name
     load_player_start : List(U8) -> Try(Model, [WadErr(Str)])
     load_player_start = |things| {
         load_from_things(things)
     }
 
+    ## Strictly tail-recursive accumulator.
+    ## The only growable that crosses the recursive call is the actors list
+    ## inside the Model. Everything else is dead by the time we recur.
     load_things_go : List(U8), U64, Model -> Try(Model, [WadErr(Str)])
     load_things_go = |data, i, model| {
         if i + 10 > List.len(data) {
@@ -52,6 +56,8 @@ Game := {}.
                 Err(WadErr("no player start (thing type 1)"))
             }
         } else {
+            ## Read the four fields, then immediately decide and recur.
+            ## No large values are kept live across the recursive call.
             match Wad.i16le_f32(data, i) {
                 Err(e) => Err(e)
                 Ok(px) => {
@@ -60,12 +66,13 @@ Game := {}.
                         Ok(py) => {
                             match Wad.i16le_f32(data, i + 4) {
                                 Err(e) => Err(e)
-                                Ok(angle) => {
+                                Ok(angle_deg) => {
                                     match Wad.u16le(data, i + 6) {
                                         Err(e) => Err(e)
                                         Ok(kind) => {
-                                            next = apply_thing(model, px, py, angle, kind)
-                                            load_things_go(data, i + 10, next)
+                                            next_model = apply_thing(model, px, py, angle_deg, kind)
+                                            ## Tail call – only next_model is live
+                                            load_things_go(data, i + 10, next_model)
                                         }
                                     }
                                 }
@@ -77,15 +84,18 @@ Game := {}.
         }
     }
 
+    ## Pure function – no allocation except the single List.append when we
+    ## actually add an actor. Player start just updates fields.
     apply_thing : Model, F32, F32, F32, U64 -> Model
-    apply_thing = |model, px, py, angle, kind| {
+    apply_thing = |model, px, py, angle_deg, kind| {
+        angle = angle_deg * 3.14159265 / 180.0
         if kind == 1 {
             {
                 player: {
                     x: px,
                     y: py,
                     z: 0,
-                    yaw: angle * 3.14159265 / 180,
+                    yaw: angle,
                     health: 100,
                 },
                 have_start: True,
@@ -95,8 +105,8 @@ Game := {}.
             actor = {
                 x: px,
                 y: py,
-                kind,
-                angle: angle * 3.14159265 / 180,
+                kind: kind,
+                angle: angle,
                 alive: True,
             }
             {
@@ -107,20 +117,18 @@ Game := {}.
         }
     }
 
-    # ---- collision (Goose-style line blocking) ----
+    # ------------------------------------------------------------------
+    # Collision (already converted to indexed style in previous step)
+    # ------------------------------------------------------------------
 
-    ## Solid if one-sided or ML_BLOCKING (flag bit 0).
     line_blocks : Map.Line -> Bool
     line_blocks = |line| {
         if line.back == 65535 {
             True
+        } else if line.flags % 2 == 1 {
+            True
         } else {
-            # flags & 1
-            if line.flags % 2 == 1 {
-                True
-            } else {
-                False
-            }
+            False
         }
     }
 
@@ -129,7 +137,6 @@ Game := {}.
         ax * by - ay * bx
     }
 
-    ## Segment intersection (open interval): does [a→b] cross [c→d]?
     segs_cross : F32, F32, F32, F32, F32, F32, F32, F32 -> Bool
     segs_cross = |ax, ay, bx, by, cx, cy, dx, dy| {
         abx = bx - ax
@@ -137,7 +144,6 @@ Game := {}.
         cdx = dx - cx
         cdy = dy - cy
         den = cross2(abx, aby, cdx, cdy)
-        # parallel-ish
         if den < 0.0001 {
             if den > -0.0001 {
                 False
@@ -150,17 +156,8 @@ Game := {}.
     }
 
     segs_cross_den :
-        F32,
-        F32,
-        F32,
-        F32,
-        F32,
-        F32,
-        F32,
-        F32,
-        F32,
-        F32,
-        F32
+        F32, F32, F32, F32, F32, F32,
+        F32, F32, F32, F32, F32
         -> Bool
     segs_cross_den = |ax, ay, _bx, _by, cx, cy, abx, aby, cdx, cdy, den| {
         acx = cx - ax
@@ -186,35 +183,33 @@ Game := {}.
         }
     }
 
-    ## True if move from (x0,y0) to (x1,y1) hits a blocking linedef.
     blocked_by_lines : Map.State, F32, F32, F32, F32 -> Bool
     blocked_by_lines = |map, x0, y0, x1, y1| {
-        blocked_go(map.lines, 0, x0, y0, x1, y1)
+        blocked_go(map, 0, x0, y0, x1, y1)
     }
 
-    blocked_go : List(Map.Line), U64, F32, F32, F32, F32 -> Bool
-    blocked_go = |lines, i, x0, y0, x1, y1| {
-        if i >= List.len(lines) {
+    blocked_go : Map.State, U64, F32, F32, F32, F32 -> Bool
+    blocked_go = |map, i, x0, y0, x1, y1| {
+        if i >= map.ld_count {
             False
         } else {
-            match List.get(lines, i) {
+            match Map.get_line(map, i) {
                 Err(_) => False
                 Ok(line) => {
                     if line_blocks(line) {
                         if segs_cross(x0, y0, x1, y1, line.ax, line.ay, line.bx, line.by) {
                             True
                         } else {
-                            blocked_go(lines, i + 1, x0, y0, x1, y1)
+                            blocked_go(map, i + 1, x0, y0, x1, y1)
                         }
                     } else {
-                        blocked_go(lines, i + 1, x0, y0, x1, y1)
+                        blocked_go(map, i + 1, x0, y0, x1, y1)
                     }
                 }
             }
         }
     }
 
-    ## Try move player by (dx, dy). On block, stay put.
     try_move : Model, Map.State, F32, F32 -> Model
     try_move = |model, map, dx, dy| {
         nx = model.player.x + dx
@@ -236,31 +231,31 @@ Game := {}.
         }
     }
 
-    ## Move forward along yaw by `dist` map units.
     try_forward : Model, Map.State, F32 -> Model
     try_forward = |model, map, dist| {
-        # cos/sin via host later; approx with small steps or platform Math
         dx = dist * cos_approx(model.player.yaw)
         dy = dist * sin_approx(model.player.yaw)
         try_move(model, map, dx, dy)
     }
 
-    ## Crude poly for smoke without Math.sin host (replace with pf.Math later).
     wrap_pi : F32 -> F32
     wrap_pi = |a| {
         pi = 3.14159265
         two_pi = 6.2831853
-        # fold into [-pi, pi]
-        var $x = a
-        $x =
-            if $x > pi {
-                $x - two_pi * (($x + pi) / two_pi).to_i64().to_f32()
-            } else if $x < -pi {
-                $x + two_pi * ((-pi - $x) / two_pi).to_i64().to_f32()
-            } else {
-                $x
-            }
-        $x
+        wrap_pi_go(a, pi, two_pi, 0)
+    }
+
+    wrap_pi_go : F32, F32, F32, I64 -> F32
+    wrap_pi_go = |x, pi, two_pi, n| {
+        if n > 64 {
+            x
+        } else if x > pi {
+            wrap_pi_go(x - two_pi, pi, two_pi, n + 1)
+        } else if x < -pi {
+            wrap_pi_go(x + two_pi, pi, two_pi, n + 1)
+        } else {
+            x
+        }
     }
 
     cos_approx : F32 -> F32
@@ -292,7 +287,6 @@ Game := {}.
         }
     }
 
-    ## N fixed sim steps: turn a bit, walk forward.
     smoke_walk : Model, Map.State, U64 -> Model
     smoke_walk = |model, map, steps| {
         smoke_walk_go(model, map, steps)

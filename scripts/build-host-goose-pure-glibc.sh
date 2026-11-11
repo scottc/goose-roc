@@ -30,7 +30,7 @@ echo "==> concat"
 cat "$TYPES" "$IMPL" "${BRIDGES[@]}" "$EXPORTS" > "$BUILD/host_all.goose"
 
 echo "==> goose --standalone"
-goose --standalone --header "$BUILD/host.h" -o "$BUILD/host.c" "$BUILD/host_all.goose"
+goose --standalone --stack-reserve 16G --header "$BUILD/host.h" -o "$BUILD/host.c" "$BUILD/host_all.goose"
 
 echo "==> zig cc (x86_64-linux-gnu)"
 "${ZIG_CC[@]}" -c "$BUILD/host.c" -o "$BUILD/host.o"

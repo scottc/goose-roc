@@ -35,6 +35,8 @@ Let's you use goose lang as a host implementation for a roc platform.
 
 Install Goose, Roc & C compiler; and then build and run the mini-doom example:
 ```sh
+nix run github:lukewilliamboswell/roc-blueprint/0.11.0 -- run host-glibc
+nix run github:lukewilliamboswell/roc-blueprint/0.11.0 -- run build-mini-doom
 nix run github:lukewilliamboswell/roc-blueprint/0.11.0 -- run run-mini-doom
 ```
 > [!NOTE]

@@ -628,7 +628,7 @@ goose_arg_names = |type_ids| {
 generate_provides_externs : List(ProvidesEntry), TypeTable, List(Str), List(Str), TypeNamePlan.PreferredNames -> Str
 generate_provides_externs = |provides_list, type_table, duplicate_records, duplicate_tags, preferred_names| {
     var $out = "// ---- Provided by Roc app ----\n\n"
-    $out = Str.concat($out, "extern \"roc_main\" fn roc_main(args: RocList) -> i32;\n\n")
+    $out = Str.concat($out, "extern fn roc_main(args: RocList) -> i32 = \"roc_main\";\n\n")
 
     for entry in provides_list {
         match entry.exported {
