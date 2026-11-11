@@ -1,17 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 HOST="$ROOT/hosts/goose-pure"
 OUT="$ROOT/platform/targets-out/x64glibc"
-CACHE="$ROOT/.cache/goose-roc-host/x64glibc"
 BUILD="$ROOT/build/goose-pure-glibc"
-mkdir -p "$OUT" "$CACHE" "$BUILD"
+CACHE="${GOOSE_HOME:-$HOME/.cache/goose-home}"
+mkdir -p "$OUT" "$BUILD"
 
 ZIG_CC=(zig cc -target x86_64-linux-gnu -O2 -fno-stack-protector -D_FORTIFY_SOURCE=0)
-
-need() { command -v "$1" >/dev/null || { echo "error: need $1" >&2; exit 1; }; }
-need goose; need zig; need roc; need ar; need nm; need nix-build
 
 echo "==> roc glue"
 roc glue "$ROOT/glue/GooseGlue.roc" "$BUILD/" "$ROOT/platform/main.roc"
@@ -19,134 +15,133 @@ roc glue "$ROOT/glue/GooseGlue.roc" "$BUILD/" "$ROOT/platform/main.roc"
 TYPES="$BUILD/roc_platform_abi_types.goose"
 EXPORTS="$BUILD/roc_platform_abi_exports.goose"
 IMPL="$HOST/host_impl.goose"
+
+BRIDGES=()
+for b in os_bridge math_bridge gfx_bridge audio_bridge phys_bridge ui_bridge; do
+  f="$HOST/stdlib_bridge/${b}.goose"
+  [[ -f "$f" ]] && BRIDGES+=("$f")
+done
+
 for f in "$TYPES" "$EXPORTS" "$IMPL"; do
   [[ -f "$f" ]] || { echo "error: missing $f" >&2; exit 1; }
 done
 
-BRIDGES=()
-for b in \
-  "$HOST/stdlib_bridge/os_bridge.goose" \
-  "$HOST/stdlib_bridge/math_bridge.goose" \
-  "$HOST/stdlib_bridge/gfx_bridge.goose" \
-  "$HOST/stdlib_bridge/audio_bridge.goose" \
-  "$HOST/stdlib_bridge/physics_bridge.goose" \
-  "$HOST/stdlib_bridge/ui_bridge.goose"
-do
-  [[ -f "$b" ]] && BRIDGES+=("$b")
-done
-
 echo "==> concat"
-{
-  cat "$TYPES"
-  cat "$IMPL"
-  for b in "${BRIDGES[@]}"; do cat "$b"; done
-  cat "$EXPORTS"
-} > "$BUILD/host_all.goose"
+cat "$TYPES" "$IMPL" "${BRIDGES[@]}" "$EXPORTS" > "$BUILD/host_all.goose"
 
 echo "==> goose --standalone"
 goose --standalone --header "$BUILD/host.h" -o "$BUILD/host.c" "$BUILD/host_all.goose"
 
 echo "==> zig cc (x86_64-linux-gnu)"
 "${ZIG_CC[@]}" -c "$BUILD/host.c" -o "$BUILD/host.o"
-"${ZIG_CC[@]}" -c "$HOST/gs_ffi_polyfill.c" -o "$BUILD/gs_ffi_polyfill.o"
-OBJS=( "$BUILD/host.o" "$BUILD/gs_ffi_polyfill.o" )
-if [[ -f "$HOST/gs_gfx_upload.c" ]]; then
-  "${ZIG_CC[@]}" -c "$HOST/gs_gfx_upload.c" -o "$BUILD/gs_gfx_upload.o"
-  OBJS+=( "$BUILD/gs_gfx_upload.o" )
-fi
+[[ -f "$HOST/gs_ffi_polyfill.c" ]] && "${ZIG_CC[@]}" -c "$HOST/gs_ffi_polyfill.c" -o "$BUILD/gs_ffi_polyfill.o"
 "${ZIG_CC[@]}" -c "$HOST/entry.c" -o "$BUILD/entry.o"
-OBJS+=( "$BUILD/entry.o" )
 
-echo "==> ar $OUT/libhost.a"
-rm -f "$OUT/libhost.a"
+OBJS=("$BUILD/host.o" "$BUILD/entry.o")
+[[ -f "$BUILD/gs_ffi_polyfill.o" ]] && OBJS+=("$BUILD/gs_ffi_polyfill.o")
 ar rcs "$OUT/libhost.a" "${OBJS[@]}"
+echo "==> ar $OUT/libhost.a"
 
-stage() {
-  local src="$1" name="$2"
-  [[ -f "$src" ]] || return 1
-  cp -f "$src" "$CACHE/$name"
-  cp -f "$src" "$OUT/$name"
-  echo "  $name"
+# --- gfx static libs from GOOSE_HOME package build (v2026.4) ---
+stage_one() {
+  local name="$1"
+  local found
+  found=$(find "$CACHE" -type f -name "$name" 2>/dev/null | head -1 || true)
+  if [[ -z "$found" ]]; then
+    echo "error: missing $name under $CACHE" >&2
+    echo "  Build gfx once:  cd app/mini_doom && goose build mini_doom.goose" >&2
+    echo "  (needs cmake + X11/xcb headers in PATH)" >&2
+    exit 1
+  fi
+  cp -f "$found" "$OUT/$name"
+  echo "  $name <- $found"
 }
 
+# echo "==> goose gfx (.a from GOOSE_HOME)"
+# # Prefer response file if goose can emit it after package build
+# if RSP=$(goose --gfx-link cc 2>/dev/null) && [[ -f "$RSP" ]]; then
+#   echo "  link-cc.rsp: $RSP"
+#   # copy every .a named in the rsp that exists
+#   while read -r tok; do
+#     case "$tok" in
+#       *.a)
+#         if [[ -f "$tok" ]]; then
+#           cp -f "$tok" "$OUT/$(basename "$tok")"
+#           echo "  $(basename "$tok")"
+#         fi
+#         ;;
+#     esac
+#   done < <(tr ' \t' '\n' < "$RSP" | grep '\.a$' || true)
+# else
+#   stage_one libgoose_gfx.a
+#   stage_one libgoose_audio.a
+#   stage_one libgoose_ui.a
+#   stage_one libSDL3.a
+# fi
+
 echo "==> goose gfx (.a)"
-RSP=$(goose --gfx-link cc)
-cp -f "$RSP" "$CACHE/link-cc.rsp"
-while read -r tok; do
-  case "$tok" in
-    *.a)
-      [[ -f "$tok" ]] || continue
-      stage "$tok" "$(basename "$tok")"
-      ;;
-  esac
-done < <(tr ' \t\n' '\n' < "$RSP" | sed '/^$/d')
+bash "$ROOT/scripts/stage-goose-gfx-libs.sh"
 
+# --- CRT + dynamic glibc (same as before) ---
 echo "==> CRT (zig libc)"
-CRT_DIR=$(zig libc 2>/dev/null | sed -n 's/^crt_dir=//p' | head -1)
-CC_DIR=$(zig libc 2>/dev/null | sed -n 's/^cc_dir=//p' | head -1)
+mapfile -t LIBC_LINES < <(zig libc 2>/dev/null || true)
+CRT_DIR=""
+for line in "${LIBC_LINES[@]}"; do
+  if [[ "$line" == crt_dir=* ]]; then
+    CRT_DIR="${line#crt_dir=}"
+  fi
+done
+[[ -n "$CRT_DIR" ]] || { echo "error: zig libc gave no crt_dir" >&2; exit 1; }
 echo "  crt_dir=$CRT_DIR"
-stage "$CRT_DIR/crt1.o" crt1.o || { echo "error: crt1.o"; exit 1; }
-stage "$CRT_DIR/crti.o" crti.o || true
-stage "$CRT_DIR/crtn.o" crtn.o || true
+for f in crt1.o crti.o crtn.o; do
+  [[ -f "$CRT_DIR/$f" ]] && cp -f "$CRT_DIR/$f" "$OUT/$f" && echo "  $f"
+done
 
-# libgcc static pieces still useful for some unresolved soft-float/EH from archives
-if [[ -n "${CC_DIR:-}" ]]; then
-  stage "$CC_DIR/libgcc.a" libgcc.a || true
-  stage "$CC_DIR/libgcc_eh.a" libgcc_eh.a || true
-fi
+# libgcc from gcc
+GCC_LIB=$(dirname "$(cc -print-libgcc-file-name)")
+for f in libgcc.a libgcc_eh.a; do
+  [[ -f "$GCC_LIB/$f" ]] && cp -f "$GCC_LIB/$f" "$OUT/$f" && echo "  $f"
+done
 
 echo "==> dynamic glibc (linker script + nonshared)"
-GLIBC_LIB="$CRT_DIR"
-LDSO="$GLIBC_LIB/ld-linux-x86-64.so.2"
+GLIBC_LIB=$(dirname "$(cc -print-file-name=libc.so.6)")
+# Prefer real .so from same tree as ld-linux
+for soname in libc.so.6 libm.so.6 libdl.so.2 libpthread.so.0 librt.so.1 libutil.so.1; do
+  if [[ -e "$GLIBC_LIB/$soname" ]]; then
+    ln -sfn "$GLIBC_LIB/$soname" "$OUT/$soname"
+    echo "  $soname -> $GLIBC_LIB/$soname"
+  fi
+done
 
-# libc_nonshared.a
-NONSHARED="$GLIBC_LIB/libc_nonshared.a"
-if [[ ! -f "$NONSHARED" ]]; then
-  NONSHARED=$(cc -print-file-name=libc_nonshared.a 2>/dev/null || true)
+# libc_nonshared + GROUP script (fixes atexit)
+NONSHARED=$(cc -print-file-name=libc_nonshared.a)
+if [[ -f "$NONSHARED" ]]; then
+  cp -f "$NONSHARED" "$OUT/libc_nonshared.a"
+  echo "  libc_nonshared.a"
 fi
-[[ -f "$NONSHARED" ]] || { echo "error: no libc_nonshared.a"; exit 1; }
-cp -f "$NONSHARED" "$OUT/libc_nonshared.a"
-echo "  libc_nonshared.a"
+LDSO=$(cc -print-file-name=ld-linux-x86-64.so.2)
+rm -f "$OUT/libc.so"
+{
+  echo "/* GNU ld script — do not replace with ELF symlink */"
+  echo "GROUP ( libc.so.6 libc_nonshared.a AS_NEEDED ( $LDSO ) )"
+} > "$OUT/libc.so"
+echo "  wrote libc.so GROUP script"
+file "$OUT/libc.so"   # must be ASCII text / linker script
 
-# sonames (symlinks into store are fine)
-ln -sfn "$GLIBC_LIB/libc.so.6"       "$OUT/libc.so.6"
-ln -sfn "$GLIBC_LIB/libm.so.6"       "$OUT/libm.so.6"
-ln -sfn "$GLIBC_LIB/libdl.so.2"      "$OUT/libdl.so.2"
-ln -sfn "$GLIBC_LIB/libpthread.so.0" "$OUT/libpthread.so.0"
-ln -sfn "$GLIBC_LIB/librt.so.1"      "$OUT/librt.so.1"
-ln -sfn "$GLIBC_LIB/libutil.so.1"    "$OUT/libutil.so.1" 2>/dev/null || true
+# libgcc_s / libstdc++ for SDL bits that need them
+for soname in libgcc_s.so.1 libstdc++.so.6; do
+  p=$(cc -print-file-name="$soname")
+  if [[ -e "$p" ]]; then
+    ln -sfn "$p" "$OUT/$soname"
+    # also plain names Roc may list
+    base="${soname%%.so*}.so"
+    ln -sfn "$p" "$OUT/$base" 2>/dev/null || true
+    echo "  $soname -> $p"
+  fi
+done
 
-ln -sfn libm.so.6       "$OUT/libm.so"
-ln -sfn libdl.so.2      "$OUT/libdl.so"
-ln -sfn libpthread.so.0 "$OUT/libpthread.so"
-ln -sfn librt.so.1      "$OUT/librt.so"
-ln -sfn libutil.so.1    "$OUT/libutil.so" 2>/dev/null || true
-
-# CRITICAL: remove any symlink before writing a real file
-rm -f "$OUT/libc.so" "$CACHE/libc.so"
-# write a regular file (not a symlink)
-cat > "$OUT/libc.so" <<EOF
-/* roc x64glibc dynamic */
-GROUP ( $GLIBC_LIB/libc.so.6 $OUT/libc_nonshared.a AS_NEEDED ( $LDSO ) )
-EOF
-cp -f "$OUT/libc.so" "$CACHE/libc.so"
-
-file "$OUT/libc.so"   # must say "ASCII text" or "script", NOT "ELF" / "symbolic link"
-head -3 "$OUT/libc.so"
-
-STDCXX=$(cc -print-file-name=libstdc++.so.6 2>/dev/null || true)
-GCC_S=$(cc -print-file-name=libgcc_s.so.1 2>/dev/null || true)
-[[ -e "$STDCXX" ]] && ln -sfn "$STDCXX" "$OUT/libstdc++.so" && ln -sfn "$STDCXX" "$OUT/libstdc++.so.6"
-[[ -e "$GCC_S" ]] && ln -sfn "$GCC_S" "$OUT/libgcc_s.so" && ln -sfn "$GCC_S" "$OUT/libgcc_s.so.1"
-
-rm -f "$OUT"/libc.a "$OUT"/libm.a "$OUT"/libpthread.a "$OUT"/libdl.a \
-      "$OUT"/librt.a "$OUT"/libutil.a "$OUT"/libresolv.a 2>/dev/null || true
-
-echo "==> checks"
-test -f "$OUT/libhost.a"
-test -e "$OUT/libc.so" || test -e "$OUT/libc.so.6"
-test -f "$OUT/libgoose_gfx.a"
+echo "==> staged in $OUT"
 ls -la "$OUT" | head -40
-nm "$OUT/libgoose_gfx.a" | grep ' T gs_gfx_open' | head -1
-echo "host-glibc (dynamic) ok"
-echo "note: platform inputs must list libc.so libm.so … not libc.a"
+nm "$OUT/libhost.a" | grep -E ' (main|roc_alloc|roc_gfx_init)$' || true
+test -f "$OUT/libgoose_gfx.a" && echo "has libgoose_gfx.a"
+test -f "$OUT/libSDL3.a" && echo "has libSDL3.a"

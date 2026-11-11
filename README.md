@@ -33,45 +33,16 @@ Let's you use goose lang as a host implementation for a roc platform.
 
 ## Build & Run
 
-Install Goose, Roc & C compiler:
+Install Goose, Roc & C compiler; and then build and run the mini-doom example:
 ```sh
-nix run github:lukewilliamboswell/roc-blueprint/0.11.0 -- shell
+nix run github:lukewilliamboswell/roc-blueprint/0.11.0 -- run run-mini-doom
 ```
-
-Generate Glue & Build Goose Host:
-> [!IMPORTANT]
-> The v2026.3 goose release dynamically links SDL3 & glibc. So on NixOS you must use `nix-ld` or `steam-run`, to run the app, should you need to call any of those dependencies.
-> It's possible to build against `x64musl` for a statically linked executable, but then we also need to provide statically linked goose dependencies, and thus provide statically linked releases.
-```sh
-./scripts/build-host-goose-pure-glibc.sh
-```
-
-Build & Run Roc App:
-```sh
-roc build app/main.roc
-```
-```
-0 errors and 0 warnings found in 213ms while successfully building:
-
-    main
-```
-
-Build & Run Mini Doom Port:
-```sh
-./scripts/build-mini-doom.sh
-```
-
-> [!IMPORTANT]
-> Depends on dynamically linked glibc (SDL3), so on NixOS you must use `nix-ld` or `steam-run`, to run the app.
-
-Steam run:
-```sh
-cd app/mini_doom
-NIXPKGS_ALLOW_UNFREE=1 nix shell nixpkgs#steam-run --impure -c \
-  steam-run env SDL_VIDEODRIVER=x11 \
-  VK_ICD_FILENAMES=/run/opengl-driver/share/vulkan/icd.d/intel_icd.x86_64.json \
-  ./main
-```
+> [!NOTE]
+> NixOS:
+>
+> Currently depends on dynamically linked glibc (SDL3).
+>
+> On NixOS one must use `nix-ld`, `steam-run-free` or `steam-run`, to run the app (which is how the build & run script is configured).
 
 ## GooseGlue.roc
 
