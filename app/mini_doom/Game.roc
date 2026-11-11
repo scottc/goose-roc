@@ -246,19 +246,35 @@ Game := {}.
     }
 
     ## Crude poly for smoke without Math.sin host (replace with pf.Math later).
+    wrap_pi : F32 -> F32
+    wrap_pi = |a| {
+        pi = 3.14159265
+        two_pi = 6.2831853
+        # fold into [-pi, pi]
+        var $x = a
+        $x =
+            if $x > pi {
+                $x - two_pi * (($x + pi) / two_pi).to_i64().to_f32()
+            } else if $x < -pi {
+                $x + two_pi * ((-pi - $x) / two_pi).to_i64().to_f32()
+            } else {
+                $x
+            }
+        $x
+    }
+
     cos_approx : F32 -> F32
     cos_approx = |a| {
-        # normalize poorly; good enough for smoke
-        x = a
+        x = wrap_pi(a)
         x2 = x * x
-        1 - x2 / 2 + x2 * x2 / 24
+        1 - x2 / 2 + x2 * x2 / 24 - x2 * x2 * x2 / 720
     }
 
     sin_approx : F32 -> F32
     sin_approx = |a| {
-        x = a
+        x = wrap_pi(a)
         x2 = x * x
-        x - x * x2 / 6 + x * x2 * x2 / 120
+        x * (1 - x2 / 6 + x2 * x2 / 120)
     }
 
     turn : Model, F32 -> Model
