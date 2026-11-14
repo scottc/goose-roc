@@ -242,3 +242,319 @@ fn main() {
     var args = empty_roc_list();
     exit(roc_main(args));
 }
+
+
+
+
+// =============================================================================
+// Slice Pool + Slot Pool – final compiling version
+// =============================================================================
+
+// ----- basic types ----------------------------------------------------------
+
+struct Slice {
+    pool_id: u64,
+    offset: u64,
+    len: u64,
+}
+
+struct HostBuffer {
+    ptr: u64,
+    len: u64,
+}
+
+// Use the real allocator already present in the host
+fn host_alloc(size: u64) -> u64 {
+    // Re-use the existing bump allocator
+    return impl_roc_alloc(size, 8);
+}
+
+fn host_free(ptr: u64) {
+    // bump allocator does not free individual blocks
+}
+
+fn host_panic(msg: u8[>..]) {
+    abort(msg);
+}
+
+fn host_read_file(path: u8[>..]) -> HostBuffer {
+    // TODO: wire to a real file reader when available
+    return HostBuffer { ptr: 0, len: 0 };
+}
+
+fn host_memcpy(dst: u64, src: u64, len: u64) {
+    memmove_u64(dst, src, len as i64);
+}
+
+fn host_free_temp(ptr: u64) {
+    // nothing for the bump allocator
+}
+
+fn host_load_u8(addr: u64) -> u8 {
+    // very slow fallback – replace with a real load later
+    var tmp: u8[>..] = [];
+    if !ffi_bytes(addr, 1, tmp) {
+        abort("host_load_u8 failed");
+    }
+    return tmp[0];
+}
+
+// ----- Slice Pool -----------------------------------------------------------
+
+struct SlicePool {
+    id: u64,
+    base: u64,
+    capacity: u64,
+    used: u64,
+    alive: bool,
+}
+
+var slice_pools: SlicePool[>..] = [];
+var next_slice_pool_id: u64 = 1;
+
+fn slice_pool_create(capacity_hint: u64) -> u64 {
+    var cap: u64 = capacity_hint;
+    if cap < 4096 {
+        cap = 4096;
+    }
+    var mem: u64 = host_alloc(cap);
+    var id: u64 = next_slice_pool_id;
+    next_slice_pool_id = next_slice_pool_id + 1;
+
+    var pool: SlicePool = SlicePool {
+        id: id,
+        base: mem,
+        capacity: cap,
+        used: 0,
+        alive: true,
+    };
+    slice_pools.push(pool);
+    return id;
+}
+
+fn slice_pool_destroy(pool_id: u64) {
+    var i: u64 = 0;
+    while i < slice_pools.len {
+        if slice_pools[i].id == pool_id {
+            if slice_pools[i].alive {
+                host_free(slice_pools[i].base);
+                slice_pools[i].alive = false;
+                slice_pools[i].used = 0;
+            }
+            return;
+        }
+        i = i + 1;
+    }
+}
+
+fn slice_pool_alloc(pool_id: u64, len: u64) -> Slice {
+    var i: u64 = 0;
+    while i < slice_pools.len {
+        if slice_pools[i].id == pool_id {
+            if slice_pools[i].alive == false {
+                host_panic("slice_pool_alloc: pool dead");
+            }
+            if slice_pools[i].used + len > slice_pools[i].capacity {
+                host_panic("slice_pool_alloc: out of space");
+            }
+            var off: u64 = slice_pools[i].used;
+            slice_pools[i].used = slice_pools[i].used + len;
+            return Slice {
+                pool_id: pool_id,
+                offset: off,
+                len: len,
+            };
+        }
+        i = i + 1;
+    }
+    host_panic("slice_pool_alloc: bad pool id");
+    return Slice { pool_id: 0, offset: 0, len: 0 };
+}
+
+fn slice_pool_load_file(pool_id: u64, path: u8[>..]) -> Slice {
+    var file: HostBuffer = host_read_file(copy(path));
+    var s: Slice = slice_pool_alloc(pool_id, file.len);
+    host_memcpy(slice_pools_get_base(pool_id) + s.offset, file.ptr, file.len);
+    host_free_temp(file.ptr);
+    return s;
+}
+
+fn slice_pool_get_byte(pool_id: u64, abs_offset: u64) -> u8 {
+    var base: u64 = slice_pools_get_base(pool_id);
+    return host_load_u8(base + abs_offset);
+}
+
+fn slice_pool_to_list(pool_id: u64, offset: u64, len: u64) -> u8[>..] {
+    var base: u64 = slice_pools_get_base(pool_id);
+    var out: u8[>..] = [];
+    var i: u64 = 0;
+    while i < len {
+        out.push(host_load_u8(base + offset + i));
+        i = i + 1;
+    }
+    return out;
+}
+
+fn slice_pools_get_base(pool_id: u64) -> u64 {
+    var i: u64 = 0;
+    while i < slice_pools.len {
+        if slice_pools[i].id == pool_id {
+            if slice_pools[i].alive {
+                return slice_pools[i].base;
+            }
+        }
+        i = i + 1;
+    }
+    host_panic("slice_pools_get_base: bad id");
+    return 0;
+}
+
+// ----- Fixed Slot Pool ------------------------------------------------------
+
+struct FixedSlotPool {
+    id: u64,
+    slot_size: u64,
+    capacity: u64,
+    base: u64,
+    alive: bool,
+    free_start: u64,
+    free_len: u64,
+}
+
+var fixed_slot_pools: FixedSlotPool[>..] = [];
+var free_storage: u64[>..] = [];
+var next_slot_pool_id: u64 = 1;
+
+fn slot_pool_create_fixed(slot_size: u64, capacity: u64) -> u64 {
+    var bytes: u64 = slot_size * capacity;
+    var mem: u64 = host_alloc(bytes);
+    var id: u64 = next_slot_pool_id;
+    next_slot_pool_id = next_slot_pool_id + 1;
+
+    // explicit cast – .len is i64
+    var start: u64 = free_storage.len as u64;
+    var i: u64 = 0;
+    while i < capacity {
+        free_storage.push(i);
+        i = i + 1;
+    }
+
+    var pool: FixedSlotPool = FixedSlotPool {
+        id: id,
+        slot_size: slot_size,
+        capacity: capacity,
+        base: mem,
+        alive: true,
+        free_start: start,
+        free_len: capacity,
+    };
+    fixed_slot_pools.push(pool);
+    return id;
+}
+
+fn slot_pool_destroy(pool_id: u64) {
+    var i: u64 = 0;
+    while i < fixed_slot_pools.len {
+        if fixed_slot_pools[i].id == pool_id {
+            if fixed_slot_pools[i].alive {
+                host_free(fixed_slot_pools[i].base);
+                fixed_slot_pools[i].alive = false;
+            }
+            return;
+        }
+        i = i + 1;
+    }
+}
+
+fn slot_pool_alloc_fixed(pool_id: u64) -> u64 {
+    var i: u64 = 0;
+    while i < fixed_slot_pools.len {
+        if fixed_slot_pools[i].id == pool_id {
+            if fixed_slot_pools[i].alive == false {
+                host_panic("slot_pool_alloc_fixed: pool dead");
+            }
+            if fixed_slot_pools[i].free_len == 0 {
+                host_panic("slot_pool_alloc_fixed: pool full");
+            }
+            var idx: u64 = fixed_slot_pools[i].free_start + fixed_slot_pools[i].free_len - 1;
+            var slot: u64 = free_storage[idx];
+            fixed_slot_pools[i].free_len = fixed_slot_pools[i].free_len - 1;
+            return slot;
+        }
+        i = i + 1;
+    }
+    host_panic("slot_pool_alloc_fixed: bad pool id");
+    return 0;
+}
+
+fn slot_pool_free(pool_id: u64, slot: u64) {
+    var i: u64 = 0;
+    while i < fixed_slot_pools.len {
+        if fixed_slot_pools[i].id == pool_id {
+            if fixed_slot_pools[i].alive {
+                var idx: u64 = fixed_slot_pools[i].free_start + fixed_slot_pools[i].free_len;
+                if idx < free_storage.len as u64 {
+                    free_storage[idx] = slot;
+                } else {
+                    free_storage.push(slot);
+                }
+                fixed_slot_pools[i].free_len = fixed_slot_pools[i].free_len + 1;
+            }
+            return;
+        }
+        i = i + 1;
+    }
+}
+
+// ----- Variable Slot Pool (bump) --------------------------------------------
+
+struct VarSlotPool {
+    id: u64,
+    base: u64,
+    capacity: u64,
+    used: u64,
+    alive: bool,
+}
+
+var var_slot_pools: VarSlotPool[>..] = [];
+
+fn slot_pool_create_var(capacity_hint_bytes: u64) -> u64 {
+    var cap: u64 = capacity_hint_bytes;
+    if cap < 4096 {
+        cap = 4096;
+    }
+    var mem: u64 = host_alloc(cap);
+    var id: u64 = next_slot_pool_id;
+    next_slot_pool_id = next_slot_pool_id + 1;
+
+    var pool: VarSlotPool = VarSlotPool {
+        id: id,
+        base: mem,
+        capacity: cap,
+        used: 0,
+        alive: true,
+    };
+    var_slot_pools.push(pool);
+    return id;
+}
+
+fn slot_pool_alloc_var(pool_id: u64, bytes: u64) -> u64 {
+    var i: u64 = 0;
+    while i < var_slot_pools.len {
+        if var_slot_pools[i].id == pool_id {
+            if var_slot_pools[i].alive == false {
+                host_panic("slot_pool_alloc_var: pool dead");
+            }
+            var aligned: u64 = (bytes + 7) & (~7);
+            if var_slot_pools[i].used + aligned > var_slot_pools[i].capacity {
+                host_panic("slot_pool_alloc_var: out of space");
+            }
+            var slot: u64 = var_slot_pools[i].used;
+            var_slot_pools[i].used = var_slot_pools[i].used + aligned;
+            return slot;
+        }
+        i = i + 1;
+    }
+    host_panic("slot_pool_alloc_var: bad pool id");
+    return 0;
+}

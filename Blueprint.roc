@@ -66,7 +66,7 @@ config = [
             "export GOOSE_HOME=$HOME/.cache/goose-home; bash scripts/setup-goose-home.sh; printf 'fn main() { print(\"tcc ok\"); }\\n' > /tmp/t.goose; goose /tmp/t.goose",
         ]),
     ]),
-    Task("host-glibc", [Use("dev"), Run(["bash", "scripts/build-host-goose-pure-glibc.sh"])]),
+    Task("build-host-glibc", [Use("dev"), Run(["bash", "scripts/build-host-goose-pure-glibc.sh"])]),
     Task("build-mini-doom", [Use("dev"), Run(["bash", "scripts/build-mini-doom.sh"])]),
     Task("run-mini-doom", [Use("dev"), Run(["bash", "scripts/run-mini-doom.sh"])]),
     Task("goose-mini-doom", [
