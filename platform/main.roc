@@ -1,6 +1,6 @@
 platform "goose"
     requires {} { main! : List(Str) => Try({}, [Exit(I32), ..]) }
-    exposes [Audio, Bump, Gfx, Math, Os, Physics, Stderr, Stdout, Ui]
+    exposes [Audio, Bump, Gfx, Math, Os, Physics, Stderr, Stdout, Ui, SlicePool, SlotPool]
     packages { }
     provides { "roc_main": main_for_host! }
     hosted {
@@ -12,6 +12,22 @@ platform "goose"
         "roc_bump_set_limit_bytes": Host.bump_set_limit_bytes!,
         "roc_bump_used_bytes": Host.bump_used_bytes!,
         "roc_bump_limit_bytes": Host.bump_limit_bytes!,
+
+        # ---- slice / slot pools ----
+        "roc_slice_pool_create": Host.slice_pool_create!,
+        "roc_slice_pool_destroy": Host.slice_pool_destroy!,
+        "roc_slice_pool_alloc": Host.slice_pool_alloc!,
+        "roc_slice_pool_from_list": Host.slice_pool_from_list!,
+        "roc_slice_pool_get_byte": Host.slice_pool_get_byte!,
+
+        "roc_slot_pool_create_fixed": Host.slot_pool_create_fixed!,
+        "roc_slot_pool_create_var": Host.slot_pool_create_var!,
+        "roc_slot_pool_destroy": Host.slot_pool_destroy!,
+        "roc_slot_pool_alloc_fixed": Host.slot_pool_alloc_fixed!,
+        "roc_slot_pool_alloc_var": Host.slot_pool_alloc_var!,
+        "roc_slot_pool_free": Host.slot_pool_free!,
+        "roc_slot_pool_get_fixed": Host.slot_pool_get_fixed!,
+        "roc_slot_pool_set_fixed": Host.slot_pool_set_fixed!,
 
         # ---- math ----
         "roc_math_sin": Host.math_sin!,
@@ -140,8 +156,10 @@ platform "goose"
         # },
     }
 
-import Audio
 import Bump
+import SlicePool
+import SlotPool
+import Audio
 import Gfx
 import Host
 import Math

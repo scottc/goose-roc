@@ -24,6 +24,23 @@ Host :: [].{
     bump_used_bytes! : {} => Try(U64, [BumpErr(Str)])
     bump_limit_bytes! : {} => Try(U64, [BumpErr(Str)])
 
+    # Slice Pool
+    slice_pool_create! : U64 => Try(U64, [PoolErr(Str)])
+    slice_pool_destroy! : U64 => Try({}, [PoolErr(Str)])
+    slice_pool_alloc! : U64, U64 => Try({ pool_id : U64, offset : U64, len : U64 }, [PoolErr(Str)])
+    slice_pool_from_list! : U64, List(U8) => Try({ pool_id : U64, offset : U64, len : U64 }, [PoolErr(Str)])
+    slice_pool_get_byte! : U64, U64 => Try(U8, [PoolErr(Str)])
+
+    # Slot Pool
+    slot_pool_create_fixed! : U64, U64 => Try(U64, [PoolErr(Str)])
+    slot_pool_create_var! : U64 => Try(U64, [PoolErr(Str)])
+    slot_pool_destroy! : U64 => Try({}, [PoolErr(Str)])
+    slot_pool_alloc_fixed! : U64 => Try(U64, [PoolErr(Str)])
+    slot_pool_alloc_var! : U64, U64 => Try(U64, [PoolErr(Str)])
+    slot_pool_free! : U64, U64 => Try({}, [PoolErr(Str)])
+    slot_pool_get_fixed! : U64, U64, U64 => Try(List(U8), [PoolErr(Str)])
+    slot_pool_set_fixed! : U64, U64, List(U8) => Try({}, [PoolErr(Str)])
+
     # Stdout / Stderr
     stdout_line! : Str => Try({}, [StdoutErr(Str)])
     stderr_line! : Str => Try({}, [StderrErr(Str)])

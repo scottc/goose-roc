@@ -1,3 +1,7 @@
+import pf.Gfx
+import Map
+import Game
+
 ## Column raycaster — type module
 Render := {}.
 {
@@ -13,18 +17,18 @@ Render := {}.
     fov : F32
     fov = 1.2
 
-    frame! : U64, Map.State, Game.Model => Try({}, [GfxErr(Str)])
-    frame! = |win, map, game| {
+    frame! : U64, List(U8), Map.State, Game.Model => Try({}, [GfxErr(Str)])
+    frame! = |win, bytes, map, game| {
         # Sky
         Gfx.clear!(win, 0.45, 0.55, 0.75, 1.0)
             .map_err(|GfxErr(e)| GfxErr(e))?
         # Floor band
         Gfx.draw_rect!(win, 0, scr_h * 0.5, scr_w, scr_h * 0.5, 0.25, 0.22, 0.18, 1.0)
             .map_err(|GfxErr(e)| GfxErr(e))?
-        # Debug: forced red rect — if this never appears, host present is still broken
+        # Debug: forced red rect
         Gfx.draw_rect!(win, 8, 8, 40, 40, 1.0, 0.0, 0.0, 1.0)
             .map_err(|GfxErr(e)| GfxErr(e))?
-        draw_columns!(win, map, game, 0)?
+        draw_columns!(win, bytes, map, game, 0)?
         draw_player_marker!(win)?
         Ok({})
     }
@@ -38,20 +42,20 @@ Render := {}.
         Ok({})
     }
 
-    draw_columns! : U64, Map.State, Game.Model, U64 => Try({}, [GfxErr(Str)])
-    draw_columns! = |win, map, game, col| {
+    draw_columns! : U64, List(U8), Map.State, Game.Model, U64 => Try({}, [GfxErr(Str)])
+    draw_columns! = |win, bytes, map, game, col| {
         if col >= ray_count {
             Ok({})
         } else {
             t = (col.to_f32() / ray_count.to_f32()) - 0.5
             ang = game.player.yaw + t * fov
-            dist = cast_ray(map, game.player.x, game.player.y, ang)
+            dist = cast_ray(bytes, map, game.player.x, game.player.y, ang)
             col_w = scr_w / ray_count.to_f32()
             x = col.to_f32() * col_w
             if dist < 1.0 {
-                draw_columns!(win, map, game, col + 1)
+                draw_columns!(win, bytes, map, game, col + 1)
             } else if dist > 4000.0 {
-                draw_columns!(win, map, game, col + 1)
+                draw_columns!(win, bytes, map, game, col + 1)
             } else {
                 scale = 12000.0 / dist
                 half0 = scale * 0.5
@@ -69,40 +73,42 @@ Render := {}.
                 b = 0.45 * shade
                 Gfx.draw_rect!(win, x, y0, col_w + 1.0, h, r, g, b, 1.0)
                     .map_err(|GfxErr(e)| GfxErr(e))?
-                draw_columns!(win, map, game, col + 1)
+                draw_columns!(win, bytes, map, game, col + 1)
             }
         }
     }
 
-    #cast_ray : Map.State, F32, F32, F32 -> F32
-    cast_ray = |map, ox, oy, ang| {
-        cast_ray_go(map, 0, ox, oy, ang, 1.0e9)
+    cast_ray : List(U8), Map.State, F32, F32, F32 -> F32
+    cast_ray = |bytes, map, ox, oy, ang| {
+        cast_ray_go(bytes, map, 0, ox, oy, ang, 1.0e9)
     }
 
-    #cast_ray_go : List(Map.Line), U64, F32, F32, F32, F32 -> F32
-    cast_ray_go = |map, i, ox, oy, ang, best| {
+    cast_ray_go : List(U8), Map.State, U64, F32, F32, F32, F32 -> F32
+    cast_ray_go = |bytes, map, i, ox, oy, ang, best| {
         if i >= map.ld_count {
             best
         } else {
-            match Map.get_line(map, i) {
+            match Map.get_line(bytes, map, i) {
                 Err(_) => best
                 Ok(line) => {
                     solid = line_is_solid(line)
                     if solid {
                         dx = Game.cos_approx(ang) * 5000.0
                         dy = Game.sin_approx(ang) * 5000.0
-                        hit = seg_intersect(ox, oy, ox + dx, oy + dy,
-                                            line.ax, line.ay, line.bx, line.by)
+                        hit = seg_intersect(
+                            ox, oy, ox + dx, oy + dy,
+                            line.ax, line.ay, line.bx, line.by,
+                        )
                         match hit {
-                            None => cast_ray_go(map, i + 1, ox, oy, ang, best)
+                            None => cast_ray_go(bytes, map, i + 1, ox, oy, ang, best)
                             Some(seg_t) => {
                                 dist = seg_t * 5000.0
                                 next = better_dist(dist, best)
-                                cast_ray_go(map, i + 1, ox, oy, ang, next)
+                                cast_ray_go(bytes, map, i + 1, ox, oy, ang, next)
                             }
                         }
                     } else {
-                        cast_ray_go(map, i + 1, ox, oy, ang, best)
+                        cast_ray_go(bytes, map, i + 1, ox, oy, ang, best)
                     }
                 }
             }
@@ -111,7 +117,6 @@ Render := {}.
 
     line_is_solid : Map.Line -> Bool
     line_is_solid = |line| {
-        # one-sided: no back sidedef
         if line.back < 0 {
             True
         } else if line.back == 65535 {
@@ -188,7 +193,3 @@ Render := {}.
         }
     }
 }
-
-import pf.Gfx
-import Map
-import Game

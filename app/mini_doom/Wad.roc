@@ -1,13 +1,9 @@
-## WAD loader that never materialises a full List(Lump).
-## Directory is scanned on demand – eliminates the recursive growable
-## that was blowing the Goose data stack.
+## WAD loader – Loaded never owns the byte buffer
 Wad := {}.
 {
-    ## Only the raw bytes + directory location. No big list of lumps.
     Loaded : {
-        wad : List(U8),
         dir_off : U64,
-        count : U64,
+        count   : U64,
     }
 
     Lump : { name : Str, start : U64, size : U64 }
@@ -117,7 +113,6 @@ Wad := {}.
         }
     }
 
-    ## Scan the directory on demand.
     find_lump_go : List(U8), U64, U64, U64, Str -> Try(Lump, [WadErr(Str)])
     find_lump_go = |wad, dir_off, count, i, name| {
         if i >= count {
@@ -147,17 +142,9 @@ Wad := {}.
         }
     }
 
-    find_lump : Loaded, Str -> Try(Lump, [WadErr(Str)])
-    find_lump = |loaded, name| {
-        find_lump_go(loaded.wad, loaded.dir_off, loaded.count, 0, name)
-    }
-
-    get_u8 : List(U8), U64 -> Try(U8, [WadErr(Str)])
-    get_u8 = |wad, at| {
-        match List.get(wad, at) {
-            Err(_) => Err(WadErr("oob"))
-            Ok(b) => Ok(b)
-        }
+    find_lump : List(U8), Loaded, Str -> Try(Lump, [WadErr(Str)])
+    find_lump = |wad, loaded, name| {
+        find_lump_go(wad, loaded.dir_off, loaded.count, 0, name)
     }
 
     i16le_f32 : List(U8), U64 -> Try(F32, [WadErr(Str)])
@@ -181,17 +168,7 @@ Wad := {}.
         }
     }
 
-    u16_at : List(U8), U64 -> Try(U64, [WadErr(Str)])
-    u16_at = |data, at| {
-        u16le(data, at)
-    }
-
-    u32_at : List(U8), U64 -> Try(U64, [WadErr(Str)])
-    u32_at = |data, at| {
-        u32le(data, at)
-    }
-
-    ## Materialise only small lumps
+    ## Materialise only small lumps (THINGS etc.)
     copy_chunk_size : U64
     copy_chunk_size = 4096
 
@@ -233,7 +210,7 @@ Wad := {}.
     materialize_range : List(U8), U64, U64 -> Try(List(U8), [WadErr(Str)])
     materialize_range = |wad, start, size| {
         if size > max_materialize {
-            Err(WadErr("lump too large to materialize; use indexed reads"))
+            Err(WadErr("lump too large to materialize"))
         } else if start + size > List.len(wad) {
             Err(WadErr("lump past end of WAD"))
         } else {
@@ -241,42 +218,17 @@ Wad := {}.
         }
     }
 
-    ## Public API
-    lump_bytes : Loaded, Str -> Try(List(U8), [WadErr(Str)])
-    lump_bytes = |loaded, name| {
-        match find_lump(loaded, name) {
+    lump_bytes : List(U8), Loaded, Str -> Try(List(U8), [WadErr(Str)])
+    lump_bytes = |wad, loaded, name| {
+        match find_lump(wad, loaded, name) {
             Err(e) => Err(e)
-            Ok(lump) => materialize_range(loaded.wad, lump.start, lump.size)
+            Ok(lump) => materialize_range(wad, lump.start, lump.size)
         }
     }
 
-    lump_bytes_of : Loaded, Lump -> Try(List(U8), [WadErr(Str)])
-    lump_bytes_of = |loaded, lump| {
-        materialize_range(loaded.wad, lump.start, lump.size)
-    }
-
-    records : Loaded, Str, U64 -> Try(List(U8), [WadErr(Str)])
-    records = |loaded, name, size| {
-        match lump_bytes(loaded, name) {
-            Err(e) => Err(e)
-            Ok(data) => {
-                len = List.len(data)
-                if len == 0 {
-                    Err(WadErr("empty lump"))
-                } else if size == 0 {
-                    Err(WadErr("bad record size"))
-                } else if len % size != 0 {
-                    Err(WadErr("bad record size"))
-                } else {
-                    Ok(data)
-                }
-            }
-        }
-    }
-
-    records_info : Loaded, Str, U64 -> Try(Lump, [WadErr(Str)])
-    records_info = |loaded, name, rec_size| {
-        match find_lump(loaded, name) {
+    records_info : List(U8), Loaded, Str, U64 -> Try(Lump, [WadErr(Str)])
+    records_info = |wad, loaded, name, rec_size| {
+        match find_lump(wad, loaded, name) {
             Err(e) => Err(e)
             Ok(lump) => {
                 if lump.size == 0 {
@@ -341,7 +293,6 @@ Wad := {}.
                             Err(WadErr("directory past end of WAD"))
                         } else {
                             Ok({
-                                wad: data,
                                 dir_off: directory,
                                 count: count,
                             })

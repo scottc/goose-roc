@@ -32,21 +32,16 @@ Game := {}.
         actors: [],
     }
 
-    ## Public entry point used by main
     load_from_things : List(U8) -> Try(Model, [WadErr(Str)])
     load_from_things = |things| {
         load_things_go(things, 0, init_empty)
     }
 
-    ## Back-compat name
     load_player_start : List(U8) -> Try(Model, [WadErr(Str)])
     load_player_start = |things| {
         load_from_things(things)
     }
 
-    ## Strictly tail-recursive accumulator.
-    ## The only growable that crosses the recursive call is the actors list
-    ## inside the Model. Everything else is dead by the time we recur.
     load_things_go : List(U8), U64, Model -> Try(Model, [WadErr(Str)])
     load_things_go = |data, i, model| {
         if i + 10 > List.len(data) {
@@ -56,8 +51,6 @@ Game := {}.
                 Err(WadErr("no player start (thing type 1)"))
             }
         } else {
-            ## Read the four fields, then immediately decide and recur.
-            ## No large values are kept live across the recursive call.
             match Wad.i16le_f32(data, i) {
                 Err(e) => Err(e)
                 Ok(px) => {
@@ -71,7 +64,6 @@ Game := {}.
                                         Err(e) => Err(e)
                                         Ok(kind) => {
                                             next_model = apply_thing(model, px, py, angle_deg, kind)
-                                            ## Tail call – only next_model is live
                                             load_things_go(data, i + 10, next_model)
                                         }
                                     }
@@ -84,8 +76,6 @@ Game := {}.
         }
     }
 
-    ## Pure function – no allocation except the single List.append when we
-    ## actually add an actor. Player start just updates fields.
     apply_thing : Model, F32, F32, F32, U64 -> Model
     apply_thing = |model, px, py, angle_deg, kind| {
         angle = angle_deg * 3.14159265 / 180.0
@@ -116,10 +106,6 @@ Game := {}.
             }
         }
     }
-
-    # ------------------------------------------------------------------
-    # Collision (already converted to indexed style in previous step)
-    # ------------------------------------------------------------------
 
     line_blocks : Map.Line -> Bool
     line_blocks = |line| {
@@ -183,38 +169,38 @@ Game := {}.
         }
     }
 
-    blocked_by_lines : Map.State, F32, F32, F32, F32 -> Bool
-    blocked_by_lines = |map, x0, y0, x1, y1| {
-        blocked_go(map, 0, x0, y0, x1, y1)
+    blocked_by_lines : List(U8), Map.State, F32, F32, F32, F32 -> Bool
+    blocked_by_lines = |bytes, map, x0, y0, x1, y1| {
+        blocked_go(bytes, map, 0, x0, y0, x1, y1)
     }
 
-    blocked_go : Map.State, U64, F32, F32, F32, F32 -> Bool
-    blocked_go = |map, i, x0, y0, x1, y1| {
+    blocked_go : List(U8), Map.State, U64, F32, F32, F32, F32 -> Bool
+    blocked_go = |bytes, map, i, x0, y0, x1, y1| {
         if i >= map.ld_count {
             False
         } else {
-            match Map.get_line(map, i) {
+            match Map.get_line(bytes, map, i) {
                 Err(_) => False
                 Ok(line) => {
                     if line_blocks(line) {
                         if segs_cross(x0, y0, x1, y1, line.ax, line.ay, line.bx, line.by) {
                             True
                         } else {
-                            blocked_go(map, i + 1, x0, y0, x1, y1)
+                            blocked_go(bytes, map, i + 1, x0, y0, x1, y1)
                         }
                     } else {
-                        blocked_go(map, i + 1, x0, y0, x1, y1)
+                        blocked_go(bytes, map, i + 1, x0, y0, x1, y1)
                     }
                 }
             }
         }
     }
 
-    try_move : Model, Map.State, F32, F32 -> Model
-    try_move = |model, map, dx, dy| {
+    try_move : List(U8), Model, Map.State, F32, F32 -> Model
+    try_move = |bytes, model, map, dx, dy| {
         nx = model.player.x + dx
         ny = model.player.y + dy
-        if blocked_by_lines(map, model.player.x, model.player.y, nx, ny) {
+        if blocked_by_lines(bytes, map, model.player.x, model.player.y, nx, ny) {
             model
         } else {
             {
@@ -231,11 +217,11 @@ Game := {}.
         }
     }
 
-    try_forward : Model, Map.State, F32 -> Model
-    try_forward = |model, map, dist| {
+    try_forward : List(U8), Model, Map.State, F32 -> Model
+    try_forward = |bytes, model, map, dist| {
         dx = dist * cos_approx(model.player.yaw)
         dy = dist * sin_approx(model.player.yaw)
-        try_move(model, map, dx, dy)
+        try_move(bytes, model, map, dx, dy)
     }
 
     wrap_pi : F32 -> F32
@@ -287,19 +273,19 @@ Game := {}.
         }
     }
 
-    smoke_walk : Model, Map.State, U64 -> Model
-    smoke_walk = |model, map, steps| {
-        smoke_walk_go(model, map, steps)
+    smoke_walk : List(U8), Model, Map.State, U64 -> Model
+    smoke_walk = |bytes, model, map, steps| {
+        smoke_walk_go(bytes, model, map, steps)
     }
 
-    smoke_walk_go : Model, Map.State, U64 -> Model
-    smoke_walk_go = |model, map, left| {
+    smoke_walk_go : List(U8), Model, Map.State, U64 -> Model
+    smoke_walk_go = |bytes, model, map, left| {
         if left == 0 {
             model
         } else {
             m1 = turn(model, 0.05)
-            m2 = try_forward(m1, map, 8)
-            smoke_walk_go(m2, map, left - 1)
+            m2 = try_forward(bytes, m1, map, 8)
+            smoke_walk_go(bytes, m2, map, left - 1)
         }
     }
 }

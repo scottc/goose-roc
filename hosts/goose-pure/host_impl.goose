@@ -558,3 +558,98 @@ fn slot_pool_alloc_var(pool_id: u64, bytes: u64) -> u64 {
     host_panic("slot_pool_alloc_var: bad pool id");
     return 0;
 }
+
+// ---- Slice pool effects (called from Roc) ---------------------------------
+
+fn impl_roc_slice_pool_create(capacity_hint: u64) -> HostSlicePoolCreateResult {
+    let id = slice_pool_create(capacity_hint);
+    // return the same 32-byte Ok layout other effects use
+    // (adjust field names to match your generated Host*Result types)
+    HostSlicePoolCreateResult {
+        p0: id, p1: 0, p2: 0,
+        tag: 1,
+        _pad0: 0, _pad1: 0, _pad2: 0, _pad3: 0, _pad4: 0, _pad5: 0, _pad6: 0,
+    }
+}
+
+fn impl_roc_slice_pool_destroy(pool_id: u64) -> HostSlicePoolDestroyResult {
+    slice_pool_destroy(pool_id);
+    line_ok_32()          // reuse the helper that returns an empty Ok
+}
+
+fn impl_roc_slice_pool_alloc(pool_id: u64, len: u64) -> HostSlicePoolAllocResult {
+    let s = slice_pool_alloc(pool_id, len);
+    // pack Slice {pool_id, offset, len} into the result
+    HostSlicePoolAllocResult {
+        pool_id: s.pool_id,
+        offset: s.offset,
+        len: s.len,
+        tag: 1,
+        // padding as required by glue
+    }
+}
+
+// The important one: copy a Roc List(U8) into the pool
+fn impl_roc_slice_pool_from_list(pool_id: u64, list: RocList) -> HostSlicePoolFromListResult {
+    let len = list.length;
+    if len == 0 {
+        // empty slice
+        // ...
+    }
+    let s = slice_pool_alloc(pool_id, len);
+    // copy bytes from the Roc list into the pool
+    if list.bytes != 0 && len > 0 {
+        memmove_u64(slice_pools_get_base(pool_id) + s.offset, list.bytes, len as i64);
+    }
+    // return the Slice
+    ...
+}
+
+fn impl_roc_slice_pool_get_byte(pool_id: u64, abs_offset: u64) -> HostSlicePoolGetByteResult {
+    let b = slice_pool_get_byte(pool_id, abs_offset);
+    // return Ok(b)
+    ...
+}
+
+fn impl_roc_slot_pool_create_fixed(slot_size: u64, capacity: u64) -> HostSlotPoolCreateResult {
+    let id = slot_pool_create_fixed(slot_size, capacity);
+    // pack Ok(id) in the usual 32-byte result layout
+    ...
+}
+
+fn impl_roc_slot_pool_create_var(capacity_hint: u64) -> HostSlotPoolCreateResult {
+    let id = slot_pool_create_var(capacity_hint);
+    ...
+}
+
+fn impl_roc_slot_pool_destroy(pool_id: u64) -> HostSlotPoolDestroyResult {
+    slot_pool_destroy(pool_id);
+    line_ok_32()
+}
+
+fn impl_roc_slot_pool_alloc_fixed(pool_id: u64) -> HostSlotPoolAllocResult {
+    let slot = slot_pool_alloc_fixed(pool_id);
+    // return Ok(slot)
+    ...
+}
+
+fn impl_roc_slot_pool_alloc_var(pool_id: u64, bytes: u64) -> HostSlotPoolAllocResult {
+    let slot = slot_pool_alloc_var(pool_id, bytes);
+    ...
+}
+
+fn impl_roc_slot_pool_free(pool_id: u64, slot: u64) -> HostSlotPoolFreeResult {
+    slot_pool_free(pool_id, slot);
+    line_ok_32()
+}
+
+// get_fixed / set_fixed – copy to/from a temporary Roc List
+fn impl_roc_slot_pool_get_fixed(pool_id: u64, slot: u64, expected_size: u64) -> HostSlotPoolGetFixedResult {
+    // allocate a Roc list of expected_size, copy the slot bytes into it, return Ok(list)
+    ...
+}
+
+fn impl_roc_slot_pool_set_fixed(pool_id: u64, slot: u64, list: RocList) -> HostSlotPoolSetFixedResult {
+    // copy list.bytes into the slot
+    ...
+}
